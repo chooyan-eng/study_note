@@ -41,7 +41,12 @@ class _CanvasArea extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = AppState.of(context);
 
-    final isEraser = appState.selectedTool == ToolType.eraser;
+    final layerAStrokes = appState.canvasState.strokes
+        .where((s) => (s.data?['layer'] as int? ?? 0) == 0)
+        .toList();
+    final layerBStrokes = appState.canvasState.strokes
+        .where((s) => (s.data?['layer'] as int? ?? 0) == 1)
+        .toList();
 
     return Stack(
       children: [
@@ -58,99 +63,139 @@ class _CanvasArea extends StatelessWidget {
             ),
           ),
 
-        Draw(
-          strokes: appState.canvasState.strokes,
-          backgroundColor: Colors.transparent,
-          pathBuilder: _buildStrokePath,
-          // 消しゴムモード時のみ標準の交差判定を有効にする
-          intersectionDetector: isEraser
-              ? IntersectionMode.segmentDistance.detector
-              : null,
-          onStrokesSelected: isEraser
-              ? (strokes) => AppStateWidget.of(context).eraseStrokes(strokes)
-              : null,
-          onStrokeStarted: (newStroke, currentStroke) {
-            if (currentStroke != null) return currentStroke;
-            final kind = newStroke.deviceKind;
-            if (kind != PointerDeviceKind.stylus &&
-                kind != PointerDeviceKind.mouse) {
-              return null;
-            }
+        // Layer A（下層）
+        _buildLayerDraw(
+          context: context,
+          appState: appState,
+          layerIndex: 0,
+          layerStrokes: layerAStrokes,
+          opacity: appState.layerAOpacity,
+        ),
 
-            final tool = appState.selectedTool;
-            if (tool == ToolType.freehand) {
-              return newStroke.copyWith(
-                color: appState.selectedColor,
-                width: 4.0,
-                data: {'tool': 'freehand', 'layer': appState.activeLayer},
-              );
-            }
-            if (tool == ToolType.lineSolid || tool == ToolType.lineDashed) {
-              return newStroke.copyWith(
-                color: appState.selectedColor,
-                width: 3.0,
-                data: {
-                  'tool': tool == ToolType.lineSolid
-                      ? 'lineSolid'
-                      : 'lineDashed',
-                  'layer': appState.activeLayer,
-                },
-              );
-            }
-            if (tool == ToolType.eraser) {
-              AppStateWidget.of(context).resetEraserHistory();
-              return newStroke.copyWith(
-                color: Colors.transparent,
-                width: 20.0,
-                data: {'tool': 'eraser'},
-              );
-            }
-            // 図形スタンプツール
-            if (_isShapeTool(tool)) {
-              return newStroke.copyWith(
-                color: appState.selectedColor,
-                width: 2.5,
-                data: {
-                  'tool': 'shape',
-                  'shapeType': tool.name,
-                  'layer': appState.activeLayer,
-                },
-              );
-            }
-            return null;
-          },
-          onStrokeUpdated: (stroke) {
-            final tool = stroke.data?['tool'] as String?;
-            if (tool == 'lineSolid' || tool == 'lineDashed') {
-              if (stroke.points.length < 2) return stroke;
-              return stroke.copyWith(
-                points: [stroke.points.first, stroke.points.last],
-              );
-            }
-            return stroke;
-          },
-          onStrokeDrawn: (stroke) {
-            if (stroke.data?['tool'] == 'eraser') return;
-
-            // 図形スタンプ: タップ位置を中心に輪郭 StrokePoint を生成して Stroke として追加
-            if (stroke.data?['tool'] == 'shape') {
-              final center = stroke.points.isNotEmpty
-                  ? stroke.points.first.position
-                  : const Offset(200, 200);
-              final stampSize = appState.stampSize;
-              final shapeTypeStr =
-                  stroke.data?['shapeType'] as String? ?? 'shapeSquare';
-              final shapePoints =
-                  _generateShapePoints(shapeTypeStr, center, stampSize);
-              AppStateWidget.of(context)
-                  .onStrokeDrawn(stroke.copyWith(points: shapePoints));
-              return;
-            }
-
-            AppStateWidget.of(context).onStrokeDrawn(stroke);
-          },
+        // Layer B（上層）
+        _buildLayerDraw(
+          context: context,
+          appState: appState,
+          layerIndex: 1,
+          layerStrokes: layerBStrokes,
+          opacity: appState.layerBOpacity,
         ),
       ],
+    );
+  }
+
+  /// 指定レイヤー用の Draw ウィジェットを生成する。
+  /// アクティブレイヤーのみ入力を受け付け、非アクティブは IgnorePointer で遮断する。
+  Widget _buildLayerDraw({
+    required BuildContext context,
+    required AppState appState,
+    required int layerIndex,
+    required List<Stroke> layerStrokes,
+    required double opacity,
+  }) {
+    final isActive = appState.activeLayer == layerIndex;
+    final isEraser = appState.selectedTool == ToolType.eraser;
+
+    return IgnorePointer(
+      ignoring: !isActive,
+      child: Opacity(
+        opacity: opacity,
+        child: Draw(
+          strokes: layerStrokes,
+          backgroundColor: Colors.transparent,
+          pathBuilder: _buildStrokePath,
+          intersectionDetector: (isEraser && isActive)
+              ? IntersectionMode.segmentDistance.detector
+              : null,
+          onStrokesSelected: (isEraser && isActive)
+              ? (strokes) => AppStateWidget.of(context).eraseStrokes(strokes)
+              : null,
+          onStrokeStarted: isActive
+              ? (newStroke, currentStroke) {
+                  if (currentStroke != null) return currentStroke;
+                  final kind = newStroke.deviceKind;
+                  if (kind != PointerDeviceKind.stylus &&
+                      kind != PointerDeviceKind.mouse) {
+                    return null;
+                  }
+
+                  final tool = appState.selectedTool;
+                  if (tool == ToolType.freehand) {
+                    return newStroke.copyWith(
+                      color: appState.selectedColor,
+                      width: 4.0,
+                      data: {'tool': 'freehand', 'layer': layerIndex},
+                    );
+                  }
+                  if (tool == ToolType.lineSolid || tool == ToolType.lineDashed) {
+                    return newStroke.copyWith(
+                      color: appState.selectedColor,
+                      width: 3.0,
+                      data: {
+                        'tool': tool == ToolType.lineSolid
+                            ? 'lineSolid'
+                            : 'lineDashed',
+                        'layer': layerIndex,
+                      },
+                    );
+                  }
+                  if (tool == ToolType.eraser) {
+                    AppStateWidget.of(context).resetEraserHistory();
+                    return newStroke.copyWith(
+                      color: Colors.transparent,
+                      width: 20.0,
+                      data: {'tool': 'eraser'},
+                    );
+                  }
+                  if (_isShapeTool(tool)) {
+                    return newStroke.copyWith(
+                      color: appState.selectedColor,
+                      width: 2.5,
+                      data: {
+                        'tool': 'shape',
+                        'shapeType': tool.name,
+                        'layer': layerIndex,
+                      },
+                    );
+                  }
+                  return null;
+                }
+              : null,
+          onStrokeUpdated: isActive
+              ? (stroke) {
+                  final tool = stroke.data?['tool'] as String?;
+                  if (tool == 'lineSolid' || tool == 'lineDashed') {
+                    if (stroke.points.length < 2) return stroke;
+                    return stroke.copyWith(
+                      points: [stroke.points.first, stroke.points.last],
+                    );
+                  }
+                  return stroke;
+                }
+              : null,
+          onStrokeDrawn: isActive
+              ? (stroke) {
+                  if (stroke.data?['tool'] == 'eraser') return;
+
+                  if (stroke.data?['tool'] == 'shape') {
+                    final center = stroke.points.isNotEmpty
+                        ? stroke.points.first.position
+                        : const Offset(200, 200);
+                    final stampSize = appState.stampSize;
+                    final shapeTypeStr =
+                        stroke.data?['shapeType'] as String? ?? 'shapeSquare';
+                    final shapePoints =
+                        _generateShapePoints(shapeTypeStr, center, stampSize);
+                    AppStateWidget.of(context)
+                        .onStrokeDrawn(stroke.copyWith(points: shapePoints));
+                    return;
+                  }
+
+                  AppStateWidget.of(context).onStrokeDrawn(stroke);
+                }
+              : null,
+        ),
+      ),
     );
   }
 }

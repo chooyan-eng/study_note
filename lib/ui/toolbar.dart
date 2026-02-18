@@ -111,11 +111,19 @@ class Toolbar extends StatelessWidget {
                 activeLayer: state.activeLayer,
                 onTap: () => actions.setLayer(0),
               ),
+              _CompactOpacitySlider(
+                value: state.layerAOpacity,
+                onChanged: (v) => actions.setLayerOpacity(0, v),
+              ),
               _LayerButton(
                 label: 'B',
                 layerIndex: 1,
                 activeLayer: state.activeLayer,
                 onTap: () => actions.setLayer(1),
+              ),
+              _CompactOpacitySlider(
+                value: state.layerBOpacity,
+                onChanged: (v) => actions.setLayerOpacity(1, v),
               ),
               const SizedBox(height: 8),
             ],
@@ -287,6 +295,57 @@ class _LayerButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// レイヤーの不透明度を調整するコンパクトスライダー。
+/// ツールバー幅（72px）に収まるよう最小サイズで設計する。
+class _CompactOpacitySlider extends StatelessWidget {
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  const _CompactOpacitySlider({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${(value * 100).round()}%',
+            style: const TextStyle(
+              color: Color(0xFF8E8E93),
+              fontSize: 9,
+            ),
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF0A84FF),
+              inactiveTrackColor: const Color(0xFF48484A),
+              thumbColor: const Color(0xFF0A84FF),
+              overlayColor: const Color(0x290A84FF),
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+            ),
+            child: SizedBox(
+              height: 28,
+              child: Slider(
+                value: value,
+                min: 0.0,
+                max: 1.0,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

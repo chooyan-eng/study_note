@@ -54,6 +54,8 @@ class AppStateWidgetState extends State<AppStateWidget> {
   ToolType _selectedTool = ToolType.freehand;
   Color _selectedColor = Colors.black;
   int _activeLayer = 0; // 0 = Layer A, 1 = Layer B
+  double _layerAOpacity = 1.0;
+  double _layerBOpacity = 1.0;
   bool _showGrid = false;
   double _stampSize = 80.0; // 図形スタンプのサイズ（px）
 
@@ -68,6 +70,8 @@ class AppStateWidgetState extends State<AppStateWidget> {
   ToolType get selectedTool => _selectedTool;
   Color get selectedColor => _selectedColor;
   int get activeLayer => _activeLayer;
+  double get layerAOpacity => _layerAOpacity;
+  double get layerBOpacity => _layerBOpacity;
   bool get showGrid => _showGrid;
   double get stampSize => _stampSize;
 
@@ -151,6 +155,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
   void setTool(ToolType tool) => setState(() => _selectedTool = tool);
   void setColor(Color color) => setState(() => _selectedColor = color);
   void setLayer(int layer) => setState(() => _activeLayer = layer);
+  void setLayerOpacity(int layer, double opacity) => setState(() {
+        if (layer == 0) _layerAOpacity = opacity;
+        else _layerBOpacity = opacity;
+      });
   void toggleGrid() => setState(() => _showGrid = !_showGrid);
   void setStampSize(double size) => setState(() => _stampSize = size);
 
@@ -163,6 +171,8 @@ class AppStateWidgetState extends State<AppStateWidget> {
       selectedTool: _selectedTool,
       selectedColor: _selectedColor,
       activeLayer: _activeLayer,
+      layerAOpacity: _layerAOpacity,
+      layerBOpacity: _layerBOpacity,
       showGrid: _showGrid,
       stampSize: _stampSize,
       child: widget.child,
@@ -179,6 +189,8 @@ class AppState extends InheritedWidget {
   final ToolType selectedTool;
   final Color selectedColor;
   final int activeLayer;
+  final double layerAOpacity;
+  final double layerBOpacity;
   final bool showGrid;
   final double stampSize;
 
@@ -190,6 +202,8 @@ class AppState extends InheritedWidget {
     required this.selectedTool,
     required this.selectedColor,
     required this.activeLayer,
+    required this.layerAOpacity,
+    required this.layerBOpacity,
     required this.showGrid,
     required this.stampSize,
     required super.child,
@@ -207,6 +221,8 @@ class AppState extends InheritedWidget {
       selectedTool != oldWidget.selectedTool ||
       selectedColor != oldWidget.selectedColor ||
       activeLayer != oldWidget.activeLayer ||
+      layerAOpacity != oldWidget.layerAOpacity ||
+      layerBOpacity != oldWidget.layerBOpacity ||
       showGrid != oldWidget.showGrid ||
       stampSize != oldWidget.stampSize;
 }
