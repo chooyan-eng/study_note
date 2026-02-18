@@ -16,4 +16,22 @@ class ImageObject extends DrawObject {
     required this.image,
     required this.bounds,
   });
+
+  ImageObject copyWith({
+    String? id,
+    Color? color,
+    double? strokeWidth,
+    int? layerIndex,
+    ui.Image? image,
+    Rect? bounds,
+  }) {
+    return ImageObject(
+      id: id ?? this.id,
+      color: color ?? this.color,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      layerIndex: layerIndex ?? this.layerIndex,
+      image: image ?? this.image,
+      bounds: bounds ?? this.bounds,
+    );
+  }
 }

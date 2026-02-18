@@ -18,4 +18,24 @@ class ShapeObject extends DrawObject {
     required this.bounds,
     required this.filled,
   });
+
+  ShapeObject copyWith({
+    String? id,
+    Color? color,
+    double? strokeWidth,
+    int? layerIndex,
+    ShapeType? type,
+    Rect? bounds,
+    bool? filled,
+  }) {
+    return ShapeObject(
+      id: id ?? this.id,
+      color: color ?? this.color,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      layerIndex: layerIndex ?? this.layerIndex,
+      type: type ?? this.type,
+      bounds: bounds ?? this.bounds,
+      filled: filled ?? this.filled,
+    );
+  }
 }

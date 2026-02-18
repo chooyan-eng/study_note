@@ -16,4 +16,24 @@ class LineObject extends DrawObject {
     required this.end,
     required this.dashed,
   });
+
+  LineObject copyWith({
+    String? id,
+    Color? color,
+    double? strokeWidth,
+    int? layerIndex,
+    Offset? start,
+    Offset? end,
+    bool? dashed,
+  }) {
+    return LineObject(
+      id: id ?? this.id,
+      color: color ?? this.color,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      layerIndex: layerIndex ?? this.layerIndex,
+      start: start ?? this.start,
+      end: end ?? this.end,
+      dashed: dashed ?? this.dashed,
+    );
+  }
 }

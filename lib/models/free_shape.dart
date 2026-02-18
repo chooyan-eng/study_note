@@ -16,4 +16,22 @@ class FreeShape extends DrawObject {
     required this.type,
     required this.bounds,
   });
+
+  FreeShape copyWith({
+    String? id,
+    Color? color,
+    double? strokeWidth,
+    int? layerIndex,
+    FreeShapeType? type,
+    Rect? bounds,
+  }) {
+    return FreeShape(
+      id: id ?? this.id,
+      color: color ?? this.color,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      layerIndex: layerIndex ?? this.layerIndex,
+      type: type ?? this.type,
+      bounds: bounds ?? this.bounds,
+    );
+  }
 }
