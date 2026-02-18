@@ -194,7 +194,7 @@ class _CanvasArea extends StatelessWidget {
   }
 }
 
-/// 右上コントロール領域: 方眼トグル・Undo/Redo・クリアをまとめたパネル
+/// 右上コントロール領域: 方眼トグル・Undo/Redo・クリア・レイヤー切り替えをまとめたパネル
 class _ControlsPanel extends StatelessWidget {
   const _ControlsPanel();
 
@@ -204,7 +204,7 @@ class _ControlsPanel extends StatelessWidget {
     final actions = AppStateWidget.of(context);
 
     return Container(
-      width: 44,
+      width: 88,
       decoration: BoxDecoration(
         color: const Color(0xFF2C2C2E),
         borderRadius: BorderRadius.circular(12),
@@ -244,6 +244,8 @@ class _ControlsPanel extends StatelessWidget {
             tooltip: 'クリア',
             onTap: actions.clearCanvas,
           ),
+          const _ControlDivider(),
+          _LayerPanelSection(state: state, actions: actions),
         ],
       ),
     );
@@ -299,6 +301,124 @@ class _ControlDivider extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 8),
       child: Divider(color: Color(0xFF48484A), height: 1, thickness: 1),
+    );
+  }
+}
+
+// ─── レイヤーパネル ───────────────────────────────────────────────────────────
+
+/// _ControlsPanel 内のレイヤー切り替え + 不透明度セクション
+class _LayerPanelSection extends StatelessWidget {
+  final AppState state;
+  final AppStateWidgetState actions;
+
+  const _LayerPanelSection({required this.state, required this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _LayerRow(
+            label: 'A',
+            isActive: state.activeLayer == 0,
+            opacity: state.layerAOpacity,
+            onTap: () => actions.setLayer(0),
+            onOpacityChanged: (v) => actions.setLayerOpacity(0, v),
+          ),
+          const SizedBox(height: 6),
+          _LayerRow(
+            label: 'B',
+            isActive: state.activeLayer == 1,
+            opacity: state.layerBOpacity,
+            onTap: () => actions.setLayer(1),
+            onOpacityChanged: (v) => actions.setLayerOpacity(1, v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// レイヤー名バッジ・不透明度表示・スライダーをまとめた1行分のウィジェット
+class _LayerRow extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final double opacity;
+  final VoidCallback onTap;
+  final ValueChanged<double> onOpacityChanged;
+
+  const _LayerRow({
+    required this.label,
+    required this.isActive,
+    required this.opacity,
+    required this.onTap,
+    required this.onOpacityChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFF0A84FF)
+                      : const Color(0xFF3A3A3C),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : const Color(0xFFAEAEB2),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${(opacity * 100).round()}%',
+                style: const TextStyle(
+                  color: Color(0xFF8E8E93),
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: const Color(0xFF0A84FF),
+            inactiveTrackColor: const Color(0xFF48484A),
+            thumbColor: const Color(0xFF0A84FF),
+            overlayColor: const Color(0x290A84FF),
+            trackHeight: 2,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+          ),
+          child: SizedBox(
+            height: 24,
+            child: Slider(
+              value: opacity,
+              min: 0.0,
+              max: 1.0,
+              onChanged: onOpacityChanged,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
