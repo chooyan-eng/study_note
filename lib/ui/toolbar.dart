@@ -102,21 +102,6 @@ class Toolbar extends StatelessWidget {
                   isSelected: state.selectedColor == color,
                   onTap: () => actions.setColor(color),
                 ),
-              const _Divider(),
-              // レイヤー切り替えセクション
-              _SectionLabel('レイヤー'),
-              _LayerButton(
-                label: 'A',
-                layerIndex: 0,
-                activeLayer: state.activeLayer,
-                onTap: () => actions.setLayer(0),
-              ),
-              _LayerButton(
-                label: 'B',
-                layerIndex: 1,
-                activeLayer: state.activeLayer,
-                onTap: () => actions.setLayer(1),
-              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -251,44 +236,4 @@ class _ColorButton extends StatelessWidget {
   }
 }
 
-class _LayerButton extends StatelessWidget {
-  final String label;
-  final int layerIndex;
-  final int activeLayer;
-  final VoidCallback onTap;
-
-  const _LayerButton({
-    required this.label,
-    required this.layerIndex,
-    required this.activeLayer,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isActive = layerIndex == activeLayer;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 56,
-        height: 32,
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF0A84FF) : const Color(0xFF3A3A3C),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isActive ? Colors.white : const Color(0xFFAEAEB2),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
