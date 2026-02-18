@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_state.dart';
 import 'screens/canvas_screen.dart';
 
 void main() {
@@ -11,8 +12,10 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: CanvasScreen(),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: const AppStateWidget(child: CanvasScreen()),
     );
   }
 }

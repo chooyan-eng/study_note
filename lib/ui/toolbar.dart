@@ -1,10 +1,294 @@
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
+
 class Toolbar extends StatelessWidget {
   const Toolbar({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+    final state = AppState.of(context);
+
+    return Container(
+      width: 72,
+      color: const Color(0xFF2C2C2E),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              // ツール選択セクション
+              _SectionLabel('ツール'),
+              _ToolButton(
+                icon: Icons.edit,
+                label: '手書き',
+                tool: ToolType.freehand,
+                currentTool: state.selectedTool,
+                onTap: () => state.onToolChanged(ToolType.freehand),
+              ),
+              _ToolButton(
+                icon: Icons.horizontal_rule,
+                label: '実線',
+                tool: ToolType.lineSolid,
+                currentTool: state.selectedTool,
+                onTap: () => state.onToolChanged(ToolType.lineSolid),
+              ),
+              _ToolButton(
+                icon: Icons.more_horiz,
+                label: '破線',
+                tool: ToolType.lineDashed,
+                currentTool: state.selectedTool,
+                onTap: () => state.onToolChanged(ToolType.lineDashed),
+              ),
+              _ToolButton(
+                icon: Icons.auto_fix_high,
+                label: '消しゴム',
+                tool: ToolType.eraser,
+                currentTool: state.selectedTool,
+                onTap: () => state.onToolChanged(ToolType.eraser),
+              ),
+              _ToolButton(
+                icon: Icons.near_me,
+                label: '選択',
+                tool: ToolType.select,
+                currentTool: state.selectedTool,
+                onTap: () => state.onToolChanged(ToolType.select),
+              ),
+              const _Divider(),
+              // カラーパレットセクション
+              _SectionLabel('色'),
+              for (final color in kPaletteColors)
+                _ColorButton(
+                  color: color,
+                  isSelected: state.selectedColor == color,
+                  onTap: () => state.onColorChanged(color),
+                ),
+              const _Divider(),
+              // レイヤー切り替えセクション
+              _SectionLabel('レイヤー'),
+              _LayerButton(
+                label: 'A',
+                layerIndex: 0,
+                activeLayer: state.activeLayer,
+                onTap: () => state.onLayerChanged(0),
+              ),
+              _LayerButton(
+                label: 'B',
+                layerIndex: 1,
+                activeLayer: state.activeLayer,
+                onTap: () => state.onLayerChanged(1),
+              ),
+              const _Divider(),
+              // Undo / Redo セクション
+              _SectionLabel('履歴'),
+              _IconActionButton(icon: Icons.undo, label: 'Undo', onTap: null),
+              _IconActionButton(icon: Icons.redo, label: 'Redo', onTap: null),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 内部ウィジェット ────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF8E8E93),
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Divider(color: Color(0xFF48484A), height: 1, thickness: 1),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final ToolType tool;
+  final ToolType currentTool;
+  final VoidCallback onTap;
+
+  const _ToolButton({
+    required this.icon,
+    required this.label,
+    required this.tool,
+    required this.currentTool,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = tool == currentTool;
+    return Tooltip(
+      message: label,
+      preferBelow: false,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 56,
+          height: 44,
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF0A84FF)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: isSelected ? Colors.white : const Color(0xFFAEAEB2),
+            size: 22,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorButton extends StatelessWidget {
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ColorButton({
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 32,
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        child: Center(
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected ? Colors.white : const Color(0xFF48484A),
+                width: isSelected ? 2.5 : 1.5,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(77),
+                        blurRadius: 4,
+                      ),
+                    ]
+                  : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LayerButton extends StatelessWidget {
+  final String label;
+  final int layerIndex;
+  final int activeLayer;
+  final VoidCallback onTap;
+
+  const _LayerButton({
+    required this.label,
+    required this.layerIndex,
+    required this.activeLayer,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = layerIndex == activeLayer;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 32,
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF0A84FF) : const Color(0xFF3A3A3C),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.white : const Color(0xFFAEAEB2),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _IconActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      preferBelow: false,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 56,
+          height: 36,
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          child: Icon(
+            icon,
+            color: onTap != null
+                ? const Color(0xFFAEAEB2)
+                : const Color(0xFF48484A),
+            size: 22,
+          ),
+        ),
+      ),
+    );
   }
 }
