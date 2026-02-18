@@ -55,6 +55,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   Color _selectedColor = Colors.black;
   int _activeLayer = 0; // 0 = Layer A, 1 = Layer B
   bool _showGrid = false;
+  double _stampSize = 80.0; // 図形スタンプのサイズ（px）
 
   // ── 消しゴム状態 ────────────────────────────────────────────────────────────
   /// 1回の消しゴムストローク中に history を push したかどうか
@@ -68,6 +69,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   Color get selectedColor => _selectedColor;
   int get activeLayer => _activeLayer;
   bool get showGrid => _showGrid;
+  double get stampSize => _stampSize;
 
   // ── キャンバス操作 ──────────────────────────────────────────────────────────
 
@@ -138,6 +140,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   void setColor(Color color) => setState(() => _selectedColor = color);
   void setLayer(int layer) => setState(() => _activeLayer = layer);
   void toggleGrid() => setState(() => _showGrid = !_showGrid);
+  void setStampSize(double size) => setState(() => _stampSize = size);
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +152,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
       selectedColor: _selectedColor,
       activeLayer: _activeLayer,
       showGrid: _showGrid,
+      stampSize: _stampSize,
       child: widget.child,
     );
   }
@@ -164,6 +168,7 @@ class AppState extends InheritedWidget {
   final Color selectedColor;
   final int activeLayer;
   final bool showGrid;
+  final double stampSize;
 
   const AppState({
     super.key,
@@ -174,6 +179,7 @@ class AppState extends InheritedWidget {
     required this.selectedColor,
     required this.activeLayer,
     required this.showGrid,
+    required this.stampSize,
     required super.child,
   });
 
@@ -189,6 +195,7 @@ class AppState extends InheritedWidget {
       selectedTool != oldWidget.selectedTool ||
       selectedColor != oldWidget.selectedColor ||
       activeLayer != oldWidget.activeLayer ||
-      showGrid != oldWidget.showGrid;
+      showGrid != oldWidget.showGrid ||
+      stampSize != oldWidget.stampSize;
 }
 

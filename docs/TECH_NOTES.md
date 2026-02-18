@@ -117,14 +117,14 @@ mouse   → デバッグ用に許可（実機では finger 扱い）
 
 #### 描画物の統一方針
 
-画像を除くすべての描画物（フリーハンド・直線・図形）は **`Stroke` に落とし込んで `Draw` ウィジェット上で描画する**。`CustomPainter` による独立レイヤーは使用しない。
+**画像を除くすべての描画物**（フリーハンド・直線・図形スタンプ）は **`Stroke` に落とし込んで `Draw` ウィジェット上で描画する**。`CustomPainter`（`CanvasPainter`）は **`ImageObject` 専用**であり、それ以外には使用しない。
 
 | 描画物 | Stroke への変換方法 |
 |--------|-------------------|
 | フリーハンド | ポインタ入力を `StrokePoint` として逐次追加 |
 | 直線（実線） | 始点と終点の2点のみを持つ `Stroke`。catmullRom（2点）が直線を生成する |
 | 直線（破線） | 始点と終点の2点のみを持つ `Stroke`。`pathBuilder` で破線 `Path` を生成して描画 |
-| 図形 | 輪郭を構成する `StrokePoint` 列として表現 |
+| 図形スタンプ | 輪郭頂点を `StrokePoint` 列として生成。`pathBuilder` で直線パスを返す（§6参照） |
 
 `CanvasState.strokes` が唯一の描画ソースであり、`Draw(strokes: ...)` に渡すだけでレンダリングが完結する。
 
@@ -326,3 +326,40 @@ Path _buildDashedLinePath(Stroke stroke, {double dashLength = 10, double gapLeng
 2. `onStrokeUpdated`: `stroke.points` を `[first, last]` の2点に制約（直線プレビュー）
 3. `onStrokeDrawn`: 通常通り `canvasState.strokes` に追加
 4. `pathBuilder` が描画時に `data['tool']` を見て破線 Path を生成
+
+---
+
+## 6. 計算記号図形（スタンプ）の描画方法 — `Stroke.points` で輪郭を表現
+
+図形スタンプは `Stroke` として描画する。**消しゴムの交差判定（`IntersectionMode.segmentDistance`）は `Stroke.points` の隣接点間の線分を対象にする**ため、輪郭座標を `points` に持つことが必須。`CanvasPainter`（CustomPainter）は使わない。
+
+### 実装フロー
+
+1. `onStrokeStarted`: `data: {'tool': 'shape', 'shapeType': '<toolName>'}` をセット
+2. `onStrokeDrawn`: タップ位置（`stroke.points.first.position`）を中心に輪郭の `StrokePoint` 列を生成し `stroke.copyWith(points: ...)` で上書きして `canvasState.strokes` に追加
+3. `pathBuilder`: `data['tool'] == 'shape'` を検出し、点を直線で結ぶポリゴン `Path` を返す
+
+### 各図形の StrokePoint 生成（80×80 基準）
+
+| 図形 | 点の構成 |
+|------|---------|
+| 正方形 | 4隅 + 閉じる点（5点） |
+| 円形 | 36分割の円周上の点（37点） |
+| 三角形 | 3頂点 + 閉じる点（4点） |
+| 菱形 | 上・右・下・左 + 閉じる点（5点） |
+| 星形 | 外・内を交互に10点 + 閉じる点（11点） |
+
+合成した `StrokePoint` のセンサ値（pressure / tilt 等）はデフォルト値（`pressure: 0.5` など）を使用。
+
+### pathBuilder での描画
+
+```dart
+Path _buildShapeOutlinePath(Stroke stroke) {
+  final path = Path();
+  path.moveTo(...first point...);
+  for (final point in stroke.points.skip(1)) {
+    path.lineTo(point.position.dx, point.position.dy);
+  }
+  return path; // 最終点が先頭と同じなので視覚的に閉じている
+}
+```
