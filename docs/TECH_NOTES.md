@@ -32,21 +32,24 @@
 
 #### `onStrokeStarted`
 
-新ストロークを開始するか否かを制御する。
+新ストロークを開始するか否かを制御する。戻り値が `null` ならキャンセル、`Stroke` を返せば描画開始。
 
 ```dart
-onStrokeStarted: (deviceKind, currentStroke) {
+// シグネチャ: Stroke? Function(Stroke newStroke, Stroke? currentStroke)?
+onStrokeStarted: (newStroke, currentStroke) {
   // currentStroke != null なら既存ストローク継続中
-  if (currentStroke != null) return StrokeAction.continueStroke();
+  if (currentStroke != null) return currentStroke;
 
-  // Apple Pencil のみ描画を許可
-  if (deviceKind == PointerDeviceKind.stylus) {
-    return StrokeAction.startNewStroke(
+  // Apple Pencil / マウスのみ描画を許可
+  if (newStroke.deviceKind == PointerDeviceKind.stylus ||
+      newStroke.deviceKind == PointerDeviceKind.mouse) {
+    return newStroke.copyWith(
       color: selectedColor,
       width: strokeWidth,
+      data: {'tool': 'freehand'},
     );
   }
-  return StrokeAction.reject();
+  return null; // キャンセル
 }
 ```
 
@@ -54,13 +57,18 @@ onStrokeStarted: (deviceKind, currentStroke) {
 
 #### `onStrokeUpdated`
 
-ドロー中にリアルタイムでポイントを操作できる。筆圧による線幅変化などに使用。
+各ポイント追加後に呼ばれる。**注意: ポイントはすでに `stroke.points` に追加済み**の状態でコールバックが来る。
+戻り値でストローク全体を上書きする。`null` を返すとストロークをキャンセル。
 
 ```dart
-onStrokeUpdated: (stroke, newPoint) {
-  // 筆圧に応じて線幅を動的変更
-  final pressure = newPoint.pressure ?? 0.5;
-  return stroke.copyWith(width: baseWidth * pressure * 2);
+// シグネチャ: Stroke? Function(Stroke currentStroke)?
+onStrokeUpdated: (stroke) {
+  // 例: 直線ツールは始点と最新点の2点のみに制約
+  if (stroke.data?['tool'] == 'lineSolid' || stroke.data?['tool'] == 'lineDashed') {
+    if (stroke.points.length < 2) return stroke;
+    return stroke.copyWith(points: [stroke.points.first, stroke.points.last]);
+  }
+  return stroke;
 }
 ```
 
@@ -114,7 +122,8 @@ mouse   → デバッグ用に許可（実機では finger 扱い）
 | 描画物 | Stroke への変換方法 |
 |--------|-------------------|
 | フリーハンド | ポインタ入力を `StrokePoint` として逐次追加 |
-| 直線（実線・破線） | 始点と終点の2点のみを持つ `Stroke`。`strokePainter` で描き分け |
+| 直線（実線） | 始点と終点の2点のみを持つ `Stroke`。catmullRom（2点）が直線を生成する |
+| 直線（破線） | 始点と終点の2点のみを持つ `Stroke`。`pathBuilder` で破線 `Path` を生成して描画 |
 | 図形 | 輪郭を構成する `StrokePoint` 列として表現 |
 
 `CanvasState.strokes` が唯一の描画ソースであり、`Draw(strokes: ...)` に渡すだけでレンダリングが完結する。
@@ -267,70 +276,53 @@ SPEC §8-2 に記載の処理を `image_importer.dart` に実装する。
 
 処理はすべて **Isolate 上で実行**し、UI スレッドをブロックしない。
 
-## 5. 「破線」の描画方法
+## 5. 「破線」の描画方法 — `Draw.pathBuilder` を使う
 
-以下、ChatGPT に生成してもらったサンプルコード
+直線ツール（破線）は `Draw` ウィジェットの `pathBuilder` パラメータで実現する。
+`CustomPainter` による独立レイヤーは**使用しない**。
 
-2点を結ぶ直線だけなら PathMetric は使わず、線分上を「dash / gap」単位で刻んで drawLine を繰り返すのがシンプルで速いです。
+### 仕組み
 
-2点の直線を破線で描く（CustomPainter向け）
+`pathBuilder: PathBuilder` は `Path Function(Stroke)` 型のコールバック。
+Stroke の `data['tool']` を見て、破線ストロークには破線 `Path` を返す。
 
 ```dart
-import 'dart:math' as math;
-import 'package:flutter/material.dart';
+Path _buildStrokePath(Stroke stroke) {
+  if (stroke.data?['tool'] == 'lineDashed') {
+    return _buildDashedLinePath(stroke);
+  }
+  // フリーハンド・実線はデフォルトの Catmull-Rom（2点では直線になる）
+  return generateCatmullRomPath(stroke);
+}
 
-void drawDashedLine(
-  Canvas canvas,
-  Offset a,
-  Offset b,
-  Paint paint, {
-  double dashLength = 10,
-  double gapLength = 6,
-}) {
+Path _buildDashedLinePath(Stroke stroke, {double dashLength = 10, double gapLength = 6}) {
+  if (stroke.points.length < 2) return Path();
+  final a = stroke.points.first.position;
+  final b = stroke.points.last.position;
+
+  final path = Path();
   final delta = b - a;
   final length = delta.distance;
-  if (length == 0) return;
+  if (length == 0) return path;
 
-  final direction = delta / length; // 単位ベクトル
+  final direction = delta / length;
   double distance = 0.0;
 
   while (distance < length) {
     final start = a + direction * distance;
     final endDistance = math.min(distance + dashLength, length);
     final end = a + direction * endDistance;
-
-    canvas.drawLine(start, end, paint);
-
+    path.moveTo(start.dx, start.dy);
+    path.lineTo(end.dx, end.dy);
     distance = endDistance + gapLength;
   }
-}
-
-class DashedSegmentPainter extends CustomPainter {
-  final Offset a;
-  final Offset b;
-
-  DashedSegmentPainter({required this.a, required this.b});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round; // 見た目が良いことが多い
-      // ..color = Colors.black; // 必要なら
-
-    drawDashedLine(
-      canvas,
-      a,
-      b,
-      paint,
-      dashLength: 10,
-      gapLength: 6,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant DashedSegmentPainter oldDelegate) =>
-      oldDelegate.a != a || oldDelegate.b != b;
+  return path;
 }
 ```
+
+### Stroke への変換フロー（直線ツール）
+
+1. `onStrokeStarted`: `data: {'tool': 'lineSolid' or 'lineDashed'}` をセット
+2. `onStrokeUpdated`: `stroke.points` を `[first, last]` の2点に制約（直線プレビュー）
+3. `onStrokeDrawn`: 通常通り `canvasState.strokes` に追加
+4. `pathBuilder` が描画時に `data['tool']` を見て破線 Path を生成

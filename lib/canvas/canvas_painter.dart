@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/canvas_state.dart';
 
-/// 直線・図形・画像など DrawObject を描画する CustomPainter
-/// フリーハンドストロークは Draw ウィジェットが担当するため、ここでは扱わない
+/// 画像など Draw ウィジェットで扱えない DrawObject を描画する CustomPainter
+/// フリーハンド・直線・図形は Stroke として Draw ウィジェットが担当する
 class CanvasPainter extends CustomPainter {
   final CanvasState state;
 
@@ -11,7 +11,7 @@ class CanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // T05以降で LineObject、ShapeObject、FreeShape、ImageObject を描画する
+    // T16以降で ImageObject を描画する
   }
 
   @override
