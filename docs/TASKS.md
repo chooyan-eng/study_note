@@ -241,8 +241,8 @@ lib/
 
 - `free_shape.dart` の `FreeShape` を完成させる（`FreeShapeType`: rect / oval）
 - ツール選択で「四角形」「楕円」を切り替え
-- `onPanStart` / `onPanUpdate` / `onPanEnd` で `Rect` を算出
-- ドラッグ中はプレビュー描画
+- 四角形は「始点と終点から算出した4つの `StrokePoint` からなる線」として扱う。そうなるように `onStrokeUpdated` でデータを加工する
+- 円は、「終点を中心とし、あらかじめ設定した半径を適用した円」として扱う。そうなるように `onStrokeUpdated` でデータを加工し、かつそのデータから円を描く `pathBuilder` を自作する
 - 確定時に `FreeShape` を `CanvasState.objects` に追加
 - 操作を Undo スタックに積む
 
