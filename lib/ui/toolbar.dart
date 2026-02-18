@@ -117,19 +117,6 @@ class Toolbar extends StatelessWidget {
                 activeLayer: state.activeLayer,
                 onTap: () => actions.setLayer(1),
               ),
-              const _Divider(),
-              // Undo / Redo セクション
-              _SectionLabel('履歴'),
-              _IconActionButton(
-                icon: Icons.undo,
-                label: 'Undo',
-                onTap: state.canUndo ? actions.undo : null,
-              ),
-              _IconActionButton(
-                icon: Icons.redo,
-                label: 'Redo',
-                onTap: state.canRedo ? actions.redo : null,
-              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -305,37 +292,3 @@ class _LayerButton extends StatelessWidget {
   }
 }
 
-class _IconActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  const _IconActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      preferBelow: false,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 56,
-          height: 36,
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          child: Icon(
-            icon,
-            color: onTap != null
-                ? const Color(0xFFAEAEB2)
-                : const Color(0xFF48484A),
-            size: 22,
-          ),
-        ),
-      ),
-    );
-  }
-}

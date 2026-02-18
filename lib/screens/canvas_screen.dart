@@ -23,7 +23,7 @@ class CanvasScreen extends StatelessWidget {
             child: Stack(
               children: [
                 _CanvasArea(),
-                Positioned(top: 12, right: 12, child: _GridToggleButton()),
+                Positioned(top: 12, right: 12, child: _ControlsPanel()),
                 Positioned(bottom: 12, left: 12, child: _StampSizePanel()),
               ],
             ),
@@ -155,31 +155,111 @@ class _CanvasArea extends StatelessWidget {
   }
 }
 
-/// 右上に表示する方眼ON/OFFトグルボタン
-class _GridToggleButton extends StatelessWidget {
-  const _GridToggleButton();
+/// 右上コントロール領域: 方眼トグル・Undo/Redo・クリアをまとめたパネル
+class _ControlsPanel extends StatelessWidget {
+  const _ControlsPanel();
 
   @override
   Widget build(BuildContext context) {
-    final showGrid = AppState.of(context).showGrid;
-    return GestureDetector(
-      onTap: () => AppStateWidget.of(context).toggleGrid(),
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: showGrid ? const Color(0xFF0A84FF) : const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Icon(Icons.grid_on, color: Colors.white, size: 22),
+    final state = AppState.of(context);
+    final actions = AppStateWidget.of(context);
+
+    return Container(
+      width: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2C2E),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ControlButton(
+            icon: Icons.grid_on,
+            tooltip: '方眼',
+            isHighlighted: state.showGrid,
+            onTap: actions.toggleGrid,
+          ),
+          const _ControlDivider(),
+          _ControlButton(
+            icon: Icons.undo,
+            tooltip: 'Undo',
+            isEnabled: state.canUndo,
+            onTap: state.canUndo ? actions.undo : null,
+          ),
+          _ControlButton(
+            icon: Icons.redo,
+            tooltip: 'Redo',
+            isEnabled: state.canRedo,
+            onTap: state.canRedo ? actions.redo : null,
+          ),
+          const _ControlDivider(),
+          _ControlButton(
+            icon: Icons.delete_sweep,
+            tooltip: 'クリア',
+            onTap: actions.clearCanvas,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ControlButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool isHighlighted;
+  final bool isEnabled;
+  final VoidCallback? onTap;
+
+  const _ControlButton({
+    required this.icon,
+    required this.tooltip,
+    this.isHighlighted = false,
+    this.isEnabled = true,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color iconColor;
+    if (isHighlighted) {
+      iconColor = const Color(0xFF0A84FF);
+    } else if (!isEnabled || onTap == null) {
+      iconColor = const Color(0xFF48484A);
+    } else {
+      iconColor = const Color(0xFFAEAEB2);
+    }
+
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(icon, color: iconColor, size: 22),
+        ),
+      ),
+    );
+  }
+}
+
+class _ControlDivider extends StatelessWidget {
+  const _ControlDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8),
+      child: Divider(color: Color(0xFF48484A), height: 1, thickness: 1),
     );
   }
 }
