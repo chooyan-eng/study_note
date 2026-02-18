@@ -124,6 +124,18 @@ class AppStateWidgetState extends State<AppStateWidget> {
     });
   }
 
+  /// アクティブレイヤーの全ストロークをクリアし、Undo/Redo スタックも破棄する。
+  void clearCanvas() {
+    setState(() {
+      _history.clear();
+      _canvasState = _canvasState.copyWith(
+        strokes: _canvasState.strokes
+            .where((s) => (s.data?['layer'] as int? ?? 0) != _activeLayer)
+            .toList(),
+      );
+    });
+  }
+
   void undo() {
     final prev = _history.undo(_canvasState);
     if (prev != null) setState(() => _canvasState = prev);

@@ -27,4 +27,10 @@ class CanvasHistory {
     _undoStack.add(current);
     return _redoStack.removeLast();
   }
+
+  /// Undo / Redo スタックをすべて破棄する
+  void clear() {
+    _undoStack.clear();
+    _redoStack.clear();
+  }
 }
