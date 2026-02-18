@@ -13,7 +13,7 @@ class CanvasScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: Colors.white,
       body: Row(
         children: [
           // 左サイドツールバー
@@ -23,11 +23,7 @@ class CanvasScreen extends StatelessWidget {
             child: Stack(
               children: const [
                 _CanvasArea(),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: _GridToggleButton(),
-                ),
+                Positioned(top: 12, right: 12, child: _GridToggleButton()),
               ],
             ),
           ),
@@ -45,71 +41,89 @@ class _CanvasArea extends StatelessWidget {
     final appState = AppState.of(context);
 
     // すべての描画物（画像を除く）は Stroke に落とし込んで Draw で描画する
-    final canvas = Draw(
-      strokes: appState.canvasState.strokes,
-      backgroundColor: Colors.white,
-      pathBuilder: _buildStrokePath,
-      onStrokeStarted: (newStroke, currentStroke) {
-        // 描画中のストロークがあればそちらを継続する
-        if (currentStroke != null) return currentStroke;
-        final kind = newStroke.deviceKind;
-        if (kind != PointerDeviceKind.stylus &&
-            kind != PointerDeviceKind.mouse) {
-          return null;
-        }
-
-        final tool = appState.selectedTool;
-        if (tool == ToolType.freehand) {
-          return newStroke.copyWith(
-            color: appState.selectedColor,
-            width: 4.0,
-            data: {'tool': 'freehand'},
-          );
-        }
-        if (tool == ToolType.lineSolid || tool == ToolType.lineDashed) {
-          return newStroke.copyWith(
-            color: appState.selectedColor,
-            width: 3.0,
-            data: {
-              'tool': tool == ToolType.lineSolid ? 'lineSolid' : 'lineDashed',
-            },
-          );
-        }
-        return null;
-      },
-      onStrokeUpdated: (stroke) {
-        final tool = stroke.data?['tool'] as String?;
-        if (tool == 'lineSolid' || tool == 'lineDashed') {
-          // 直線: 始点と現在位置の2点のみに制約してプレビュー表示
-          if (stroke.points.length < 2) return stroke;
-          return stroke.copyWith(
-            points: [stroke.points.first, stroke.points.last],
-          );
-        }
-        return stroke;
-      },
-      onStrokeDrawn: (stroke) {
-        // ツール種別によらず、ストロークとして strokes に追加
-        // (始点と終点が同じタップのみの場合も含めすべて記録)
-        AppStateWidget.of(context).onStrokeDrawn(stroke);
-      },
-    );
-
-    if (!appState.showGrid) return canvas;
+    final isEraser = appState.selectedTool == ToolType.eraser;
 
     // 方眼表示: Draw の上に GridPaper を重ねる（IgnorePointer で入力は Draw へ透過）
     return Stack(
       children: [
-        canvas,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: GridPaper(
-              color: const Color(0x28888888), // 約16%の薄い灰色
-              interval: 10,
-              divisions: 1,
-              subdivisions: 1,
+        if (appState.showGrid)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: GridPaper(
+                color: const Color(0x28888888), // 約16%の薄い灰色
+                interval: 10,
+                divisions: 1,
+                subdivisions: 1,
+              ),
             ),
           ),
+
+        Draw(
+          strokes: appState.canvasState.strokes,
+          backgroundColor: Colors.transparent,
+          pathBuilder: _buildStrokePath,
+          // 消しゴムモード時のみ標準の交差判定を有効にする
+          intersectionDetector: isEraser
+              ? IntersectionMode.segmentDistance.detector
+              : null,
+          onStrokesSelected: isEraser
+              ? (strokes) => AppStateWidget.of(context).eraseStrokes(strokes)
+              : null,
+          onStrokeStarted: (newStroke, currentStroke) {
+            // 描画中のストロークがあればそちらを継続する
+            if (currentStroke != null) return currentStroke;
+            final kind = newStroke.deviceKind;
+            if (kind != PointerDeviceKind.stylus &&
+                kind != PointerDeviceKind.mouse) {
+              return null;
+            }
+
+            final tool = appState.selectedTool;
+            if (tool == ToolType.freehand) {
+              return newStroke.copyWith(
+                color: appState.selectedColor,
+                width: 4.0,
+                data: {'tool': 'freehand', 'layer': appState.activeLayer},
+              );
+            }
+            if (tool == ToolType.lineSolid || tool == ToolType.lineDashed) {
+              return newStroke.copyWith(
+                color: appState.selectedColor,
+                width: 3.0,
+                data: {
+                  'tool': tool == ToolType.lineSolid
+                      ? 'lineSolid'
+                      : 'lineDashed',
+                  'layer': appState.activeLayer,
+                },
+              );
+            }
+            if (tool == ToolType.eraser) {
+              AppStateWidget.of(context).resetEraserHistory();
+              return newStroke.copyWith(
+                color: Colors.transparent,
+                width: 20.0, // 交差判定の閾値として使われる幅
+                data: {'tool': 'eraser'},
+              );
+            }
+            return null;
+          },
+          onStrokeUpdated: (stroke) {
+            final tool = stroke.data?['tool'] as String?;
+            if (tool == 'lineSolid' || tool == 'lineDashed') {
+              // 直線: 始点と現在位置の2点のみに制約してプレビュー表示
+              if (stroke.points.length < 2) return stroke;
+              return stroke.copyWith(
+                points: [stroke.points.first, stroke.points.last],
+              );
+            }
+            return stroke;
+          },
+          onStrokeDrawn: (stroke) {
+            // 消しゴムストロークはキャンバスに追加しない
+            if (stroke.data?['tool'] == 'eraser') return;
+            AppStateWidget.of(context).onStrokeDrawn(stroke);
+          },
         ),
       ],
     );
@@ -129,9 +143,7 @@ class _GridToggleButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: showGrid
-              ? const Color(0xFF0A84FF)
-              : const Color(0xFF2C2C2E),
+          color: showGrid ? const Color(0xFF0A84FF) : const Color(0xFF2C2C2E),
           borderRadius: BorderRadius.circular(10),
           boxShadow: const [
             BoxShadow(
@@ -156,6 +168,10 @@ Path _buildStrokePath(Stroke stroke) {
   final tool = stroke.data?['tool'] as String?;
   if (tool == 'lineDashed') {
     return _buildDashedLinePath(stroke);
+  }
+  if (tool == 'eraser') {
+    // 消しゴムストロークは描画しない（ヒットテストのみ使用）
+    return Path();
   }
   return generateCatmullRomPath(stroke);
 }

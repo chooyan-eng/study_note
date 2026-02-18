@@ -56,6 +56,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
   int _activeLayer = 0; // 0 = Layer A, 1 = Layer B
   bool _showGrid = false;
 
+  // ── 消しゴム状態 ────────────────────────────────────────────────────────────
+  /// 1回の消しゴムストローク中に history を push したかどうか
+  bool _eraserHistoryPushed = false;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   CanvasState get canvasState => _canvasState;
   bool get canUndo => _history.canUndo;
@@ -82,6 +86,38 @@ class AppStateWidgetState extends State<AppStateWidget> {
       _history.push(_canvasState);
       _canvasState = _canvasState.copyWith(
         objects: [..._canvasState.objects, object],
+      );
+    });
+  }
+
+  /// 新しい消しゴムストロークの開始時に呼び出す。
+  /// history push フラグをリセットして、1ストローク = 1 Undo 単位とする。
+  void resetEraserHistory() => _eraserHistoryPushed = false;
+
+  /// Draw.onStrokesSelected から渡された交差ストロークをアクティブレイヤーから削除する。
+  /// 最初の削除発生時に一度だけ history に push する（1ストローク = 1 Undo 単位）。
+  void eraseStrokes(List<Stroke> strokes) {
+    // すでに削除済みのストロークを除外（同一フレーム内の重複呼び出し対策）
+    final toRemove =
+        strokes
+            .where(
+              (s) =>
+                  _canvasState.strokes.contains(s) &&
+                  (s.data?['layer'] as int? ?? 0) == _activeLayer,
+            )
+            .toList();
+
+    if (toRemove.isEmpty) return;
+
+    setState(() {
+      if (!_eraserHistoryPushed) {
+        _history.push(_canvasState);
+        _eraserHistoryPushed = true;
+      }
+      final removeSet = toRemove.toSet();
+      _canvasState = _canvasState.copyWith(
+        strokes:
+            _canvasState.strokes.where((s) => !removeSet.contains(s)).toList(),
       );
     });
   }
@@ -155,3 +191,4 @@ class AppState extends InheritedWidget {
       activeLayer != oldWidget.activeLayer ||
       showGrid != oldWidget.showGrid;
 }
+
