@@ -54,6 +54,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   ToolType _selectedTool = ToolType.freehand;
   Color _selectedColor = Colors.black;
   int _activeLayer = 0; // 0 = Layer A, 1 = Layer B
+  bool _showGrid = false;
 
   // ── Getters ────────────────────────────────────────────────────────────────
   CanvasState get canvasState => _canvasState;
@@ -62,6 +63,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   ToolType get selectedTool => _selectedTool;
   Color get selectedColor => _selectedColor;
   int get activeLayer => _activeLayer;
+  bool get showGrid => _showGrid;
 
   // ── キャンバス操作 ──────────────────────────────────────────────────────────
 
@@ -99,6 +101,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   void setTool(ToolType tool) => setState(() => _selectedTool = tool);
   void setColor(Color color) => setState(() => _selectedColor = color);
   void setLayer(int layer) => setState(() => _activeLayer = layer);
+  void toggleGrid() => setState(() => _showGrid = !_showGrid);
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +112,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
       selectedTool: _selectedTool,
       selectedColor: _selectedColor,
       activeLayer: _activeLayer,
+      showGrid: _showGrid,
       child: widget.child,
     );
   }
@@ -123,6 +127,7 @@ class AppState extends InheritedWidget {
   final ToolType selectedTool;
   final Color selectedColor;
   final int activeLayer;
+  final bool showGrid;
 
   const AppState({
     super.key,
@@ -132,6 +137,7 @@ class AppState extends InheritedWidget {
     required this.selectedTool,
     required this.selectedColor,
     required this.activeLayer,
+    required this.showGrid,
     required super.child,
   });
 
@@ -146,5 +152,6 @@ class AppState extends InheritedWidget {
       canRedo != oldWidget.canRedo ||
       selectedTool != oldWidget.selectedTool ||
       selectedColor != oldWidget.selectedColor ||
-      activeLayer != oldWidget.activeLayer;
+      activeLayer != oldWidget.activeLayer ||
+      showGrid != oldWidget.showGrid;
 }
