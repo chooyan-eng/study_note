@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/material.dart';
 
@@ -56,6 +58,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
   int _activeLayer = 0; // 0 = Layer A, 1 = Layer B
   bool _showGrid = false;
 
+  // ── 消しゴム状態 ────────────────────────────────────────────────────────────
+  /// 1回の消しゴムストローク中に history を push したかどうか
+  bool _eraserHistoryPushed = false;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   CanvasState get canvasState => _canvasState;
   bool get canUndo => _history.canUndo;
@@ -82,6 +88,37 @@ class AppStateWidgetState extends State<AppStateWidget> {
       _history.push(_canvasState);
       _canvasState = _canvasState.copyWith(
         objects: [..._canvasState.objects, object],
+      );
+    });
+  }
+
+  /// 消しゴムの1点分のヒットテストを実行し、当たったストロークをアクティブレイヤーから削除する。
+  /// [isFirstPoint] が true のときは新しい消しゴムストロークの開始点なので、
+  /// 最初の削除が発生したタイミングで history に push する（1ストローク = 1 Undo 単位）。
+  void eraseAtPoint(
+    Offset point, {
+    required bool isFirstPoint,
+    double eraserRadius = 20.0,
+  }) {
+    if (isFirstPoint) _eraserHistoryPushed = false;
+
+    final toRemove = _canvasState.strokes.where((stroke) {
+      final strokeLayer = stroke.data?['layer'] as int? ?? 0;
+      if (strokeLayer != _activeLayer) return false;
+      return _strokeHitTest(stroke, point, eraserRadius);
+    }).toList();
+
+    if (toRemove.isEmpty) return;
+
+    setState(() {
+      if (!_eraserHistoryPushed) {
+        _history.push(_canvasState);
+        _eraserHistoryPushed = true;
+      }
+      final removeSet = toRemove.toSet();
+      _canvasState = _canvasState.copyWith(
+        strokes:
+            _canvasState.strokes.where((s) => !removeSet.contains(s)).toList(),
       );
     });
   }
@@ -154,4 +191,32 @@ class AppState extends InheritedWidget {
       selectedColor != oldWidget.selectedColor ||
       activeLayer != oldWidget.activeLayer ||
       showGrid != oldWidget.showGrid;
+}
+
+// ── 消しゴム ヒットテスト ─────────────────────────────────────────────────────
+
+/// ストローク [stroke] が消しゴム点 [point]（半径 [radius]）に当たるかを判定する。
+bool _strokeHitTest(Stroke stroke, Offset point, double radius) {
+  final tool = stroke.data?['tool'] as String?;
+  if (tool == 'freehand') {
+    return stroke.points.any((p) => (p.position - point).distance <= radius);
+  } else if (tool == 'lineSolid' || tool == 'lineDashed') {
+    if (stroke.points.length < 2) return false;
+    final start = stroke.points.first.position;
+    final end = stroke.points.last.position;
+    return _distanceToSegment(point, start, end) <= radius;
+  }
+  return false;
+}
+
+/// 点 [p] から線分 [a]→[b] への最短距離を返す。
+double _distanceToSegment(Offset p, Offset a, Offset b) {
+  final dx = b.dx - a.dx;
+  final dy = b.dy - a.dy;
+  final lengthSq = dx * dx + dy * dy;
+  if (lengthSq == 0) return (p - a).distance;
+  final t = ((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / lengthSq;
+  final tClamped = math.max(0.0, math.min(1.0, t));
+  final nearest = Offset(a.dx + tClamped * dx, a.dy + tClamped * dy);
+  return (p - nearest).distance;
 }

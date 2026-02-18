@@ -63,7 +63,7 @@ class _CanvasArea extends StatelessWidget {
           return newStroke.copyWith(
             color: appState.selectedColor,
             width: 4.0,
-            data: {'tool': 'freehand'},
+            data: {'tool': 'freehand', 'layer': appState.activeLayer},
           );
         }
         if (tool == ToolType.lineSolid || tool == ToolType.lineDashed) {
@@ -72,7 +72,15 @@ class _CanvasArea extends StatelessWidget {
             width: 3.0,
             data: {
               'tool': tool == ToolType.lineSolid ? 'lineSolid' : 'lineDashed',
+              'layer': appState.activeLayer,
             },
+          );
+        }
+        if (tool == ToolType.eraser) {
+          return newStroke.copyWith(
+            color: Colors.transparent,
+            width: 1.0,
+            data: {'tool': 'eraser'},
           );
         }
         return null;
@@ -86,11 +94,19 @@ class _CanvasArea extends StatelessWidget {
             points: [stroke.points.first, stroke.points.last],
           );
         }
+        if (tool == 'eraser') {
+          // 消しゴム: 各点でヒットテストを実行してストロークを削除
+          AppStateWidget.of(context).eraseAtPoint(
+            stroke.points.last.position,
+            isFirstPoint: stroke.points.length == 1,
+          );
+          return stroke;
+        }
         return stroke;
       },
       onStrokeDrawn: (stroke) {
-        // ツール種別によらず、ストロークとして strokes に追加
-        // (始点と終点が同じタップのみの場合も含めすべて記録)
+        // 消しゴムストロークはキャンバスに追加しない
+        if (stroke.data?['tool'] == 'eraser') return;
         AppStateWidget.of(context).onStrokeDrawn(stroke);
       },
     );
@@ -156,6 +172,10 @@ Path _buildStrokePath(Stroke stroke) {
   final tool = stroke.data?['tool'] as String?;
   if (tool == 'lineDashed') {
     return _buildDashedLinePath(stroke);
+  }
+  if (tool == 'eraser') {
+    // 消しゴムストロークは描画しない（ヒットテストのみ使用）
+    return Path();
   }
   return generateCatmullRomPath(stroke);
 }
