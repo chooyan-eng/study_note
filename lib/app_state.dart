@@ -124,10 +124,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
     });
   }
 
-  /// アクティブレイヤーの全ストロークをクリアする。
+  /// アクティブレイヤーの全ストロークをクリアし、Undo/Redo スタックも破棄する。
   void clearCanvas() {
     setState(() {
-      _history.push(_canvasState);
+      _history.clear();
       _canvasState = _canvasState.copyWith(
         strokes: _canvasState.strokes
             .where((s) => (s.data?['layer'] as int? ?? 0) != _activeLayer)
