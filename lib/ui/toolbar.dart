@@ -8,6 +8,7 @@ class Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppState.of(context);
+    final actions = AppStateWidget.of(context);
 
     return Container(
       width: 72,
@@ -24,35 +25,35 @@ class Toolbar extends StatelessWidget {
                 label: '手書き',
                 tool: ToolType.freehand,
                 currentTool: state.selectedTool,
-                onTap: () => state.onToolChanged(ToolType.freehand),
+                onTap: () => actions.setTool(ToolType.freehand),
               ),
               _ToolButton(
                 icon: Icons.horizontal_rule,
                 label: '実線',
                 tool: ToolType.lineSolid,
                 currentTool: state.selectedTool,
-                onTap: () => state.onToolChanged(ToolType.lineSolid),
+                onTap: () => actions.setTool(ToolType.lineSolid),
               ),
               _ToolButton(
                 icon: Icons.more_horiz,
                 label: '破線',
                 tool: ToolType.lineDashed,
                 currentTool: state.selectedTool,
-                onTap: () => state.onToolChanged(ToolType.lineDashed),
+                onTap: () => actions.setTool(ToolType.lineDashed),
               ),
               _ToolButton(
                 icon: Icons.auto_fix_high,
                 label: '消しゴム',
                 tool: ToolType.eraser,
                 currentTool: state.selectedTool,
-                onTap: () => state.onToolChanged(ToolType.eraser),
+                onTap: () => actions.setTool(ToolType.eraser),
               ),
               _ToolButton(
                 icon: Icons.near_me,
                 label: '選択',
                 tool: ToolType.select,
                 currentTool: state.selectedTool,
-                onTap: () => state.onToolChanged(ToolType.select),
+                onTap: () => actions.setTool(ToolType.select),
               ),
               const _Divider(),
               // カラーパレットセクション
@@ -61,7 +62,7 @@ class Toolbar extends StatelessWidget {
                 _ColorButton(
                   color: color,
                   isSelected: state.selectedColor == color,
-                  onTap: () => state.onColorChanged(color),
+                  onTap: () => actions.setColor(color),
                 ),
               const _Divider(),
               // レイヤー切り替えセクション
@@ -70,19 +71,27 @@ class Toolbar extends StatelessWidget {
                 label: 'A',
                 layerIndex: 0,
                 activeLayer: state.activeLayer,
-                onTap: () => state.onLayerChanged(0),
+                onTap: () => actions.setLayer(0),
               ),
               _LayerButton(
                 label: 'B',
                 layerIndex: 1,
                 activeLayer: state.activeLayer,
-                onTap: () => state.onLayerChanged(1),
+                onTap: () => actions.setLayer(1),
               ),
               const _Divider(),
               // Undo / Redo セクション
               _SectionLabel('履歴'),
-              _IconActionButton(icon: Icons.undo, label: 'Undo', onTap: null),
-              _IconActionButton(icon: Icons.redo, label: 'Redo', onTap: null),
+              _IconActionButton(
+                icon: Icons.undo,
+                label: 'Undo',
+                onTap: state.canUndo ? actions.undo : null,
+              ),
+              _IconActionButton(
+                icon: Icons.redo,
+                label: 'Redo',
+                onTap: state.canRedo ? actions.redo : null,
+              ),
               const SizedBox(height: 8),
             ],
           ),

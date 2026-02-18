@@ -107,17 +107,17 @@ mouse   → デバッグ用に許可（実機では finger 扱い）
 - `CanvasState`（`objects` リスト全体）のスナップショットをスタックに積む
 - 操作単位: ストローク完了・図形追加・削除・クリア など
 
-#### フリーハンドの `DrawObject` モデル
+#### 描画物の統一方針
 
-```dart
-class FreePaint extends DrawObject {
-  List<Offset> points;
-  // draw_your_image の Stroke から変換して保持
-}
-```
+画像を除くすべての描画物（フリーハンド・直線・図形）は **`Stroke` に落とし込んで `Draw` ウィジェット上で描画する**。`CustomPainter` による独立レイヤーは使用しない。
 
-`Stroke` が確定したら `FreePaint` へ変換して `CanvasState.objects` に追加する。
-`draw_your_image` 側のストローク一覧とは分離し、**本プロジェクトのオブジェクトモデルを正として管理する**。
+| 描画物 | Stroke への変換方法 |
+|--------|-------------------|
+| フリーハンド | ポインタ入力を `StrokePoint` として逐次追加 |
+| 直線（実線・破線） | 始点と終点の2点のみを持つ `Stroke`。`strokePainter` で描き分け |
+| 図形 | 輪郭を構成する `StrokePoint` 列として表現 |
+
+`CanvasState.strokes` が唯一の描画ソースであり、`Draw(strokes: ...)` に渡すだけでレンダリングが完結する。
 
 ---
 
