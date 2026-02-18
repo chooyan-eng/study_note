@@ -18,8 +18,19 @@ class CanvasScreen extends StatelessWidget {
         children: [
           // 左サイドツールバー
           const Toolbar(),
-          // キャンバス領域
-          const Expanded(child: _CanvasArea()),
+          // キャンバス領域（方眼トグルボタンを右上に重ねる）
+          Expanded(
+            child: Stack(
+              children: const [
+                _CanvasArea(),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: _GridToggleButton(),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -34,7 +45,7 @@ class _CanvasArea extends StatelessWidget {
     final appState = AppState.of(context);
 
     // すべての描画物（画像を除く）は Stroke に落とし込んで Draw で描画する
-    return Draw(
+    final canvas = Draw(
       strokes: appState.canvasState.strokes,
       backgroundColor: Colors.white,
       pathBuilder: _buildStrokePath,
@@ -82,6 +93,56 @@ class _CanvasArea extends StatelessWidget {
         // (始点と終点が同じタップのみの場合も含めすべて記録)
         AppStateWidget.of(context).onStrokeDrawn(stroke);
       },
+    );
+
+    if (!appState.showGrid) return canvas;
+
+    // 方眼表示: Draw の上に GridPaper を重ねる（IgnorePointer で入力は Draw へ透過）
+    return Stack(
+      children: [
+        canvas,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: GridPaper(
+              color: const Color(0x28888888), // 約16%の薄い灰色
+              interval: 10,
+              divisions: 1,
+              subdivisions: 1,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 右上に表示する方眼ON/OFFトグルボタン
+class _GridToggleButton extends StatelessWidget {
+  const _GridToggleButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final showGrid = AppState.of(context).showGrid;
+    return GestureDetector(
+      onTap: () => AppStateWidget.of(context).toggleGrid(),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: showGrid
+              ? const Color(0xFF0A84FF)
+              : const Color(0xFF2C2C2E),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.grid_on, color: Colors.white, size: 22),
+      ),
     );
   }
 }
