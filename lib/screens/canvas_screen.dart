@@ -339,9 +339,24 @@ class _ControlsPanelState extends State<_ControlsPanel> {
           builder: (_) => CropImageScreen(imageBytes: photoBytes),
         ),
       );
-      if (croppedBytes == null) return;
+      if (croppedBytes == null || !mounted) return;
 
-      // T15以降: 加工→貼り付けへ続く
+      // T15: 加工パイプライン（Isolate で実行、その間ローディングダイアログを表示）
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const _ProcessingDialog(),
+      );
+      late final Uint8List processedBytes;
+      try {
+        processedBytes = await ImageImporter.processImage(croppedBytes);
+      } finally {
+        if (mounted) Navigator.of(context).pop();
+      }
+      if (!mounted) return;
+
+      // T16: キャンバスへの貼り付けへ続く（processedBytes を使用）
+      debugPrint('T15 complete: processed ${processedBytes.length} bytes');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1366,6 +1381,52 @@ class _SelectionPropertyPanel extends StatelessWidget {
     AppStateWidget.of(context).updateSelectedStroke(
       stroke.copyWith(points: newPoints, data: newData),
       pushHistory: false,
+    );
+  }
+}
+
+// ─── 画像処理中ローディングダイアログ (T15) ───────────────────────────────────
+
+/// 画像加工パイプライン実行中に表示するモーダルローディングダイアログ。
+/// 処理は Isolate 上で行われるため UI はブロックされない。
+class _ProcessingDialog extends StatelessWidget {
+  const _ProcessingDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2E),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF0A84FF)),
+              SizedBox(height: 16),
+              Text(
+                '画像を処理中...',
+                style: TextStyle(
+                  color: Color(0xFFAEAEB2),
+                  fontSize: 14,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
