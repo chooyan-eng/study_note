@@ -44,9 +44,9 @@ class _CropImageScreenState extends State<CropImageScreen> {
       Navigator.of(context).pop<Uint8List>(result.croppedImage);
     } else {
       setState(() => _isCropping = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('切り抜きに失敗しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('切り抜きに失敗しました')));
     }
   }
 
@@ -57,16 +57,14 @@ class _CropImageScreenState extends State<CropImageScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1C1C1E),
         foregroundColor: Colors.white,
+        centerTitle: true,
         title: const Text(
           '切り抜き',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
         ),
         leading: TextButton(
           onPressed: _isCropping ? null : () => Navigator.of(context).pop(),
-          child: const Text(
-            'キャンセル',
-            style: TextStyle(color: Color(0xFF0A84FF), fontSize: 16),
-          ),
+          child: const Text('キャンセル'),
         ),
         leadingWidth: 96,
         actions: [
@@ -83,11 +81,7 @@ class _CropImageScreenState extends State<CropImageScreen> {
                   )
                 : const Text(
                     '確定',
-                    style: TextStyle(
-                      color: Color(0xFF0A84FF),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
           ),
           const SizedBox(width: 8),
@@ -97,10 +91,9 @@ class _CropImageScreenState extends State<CropImageScreen> {
         image: widget.imageBytes,
         controller: _cropController,
         onCropped: _onCropped,
-        aspectRatio: null,
-        interactive: false,
         maskColor: Colors.black54,
         baseColor: Colors.black,
+        initialRectBuilder: InitialRectBuilder.withSizeAndRatio(size: 0.5),
       ),
     );
   }
