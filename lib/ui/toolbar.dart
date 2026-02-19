@@ -48,13 +48,6 @@ class Toolbar extends StatelessWidget {
                 currentTool: state.selectedTool,
                 onTap: () => actions.setTool(ToolType.eraser),
               ),
-              _ToolButton(
-                icon: Icons.near_me,
-                label: '選択',
-                tool: ToolType.select,
-                currentTool: state.selectedTool,
-                onTap: () => actions.setTool(ToolType.select),
-              ),
               const _Divider(),
               // 図形スタンプセクション
               _SectionLabel('図形'),

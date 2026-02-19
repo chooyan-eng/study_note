@@ -29,6 +29,9 @@ class _CanvasScreenState extends State<CanvasScreen> {
   // 画像配置確定前の一時保持バイト列（null = オーバーレイ非表示）
   Uint8List? _pendingImageBytes;
 
+  // スナップショットパネルの開閉状態
+  bool _showSnapshotPanel = false;
+
   void _onImageProcessed(Uint8List bytes) =>
       setState(() => _pendingImageBytes = bytes);
 
@@ -73,6 +76,9 @@ class _CanvasScreenState extends State<CanvasScreen> {
                   child: _ControlsPanel(
                     onSaveSnapshot: _saveSnapshot,
                     onImageProcessed: _onImageProcessed,
+                    showSnapshotPanel: _showSnapshotPanel,
+                    onToggleSnapshotPanel: () =>
+                        setState(() => _showSnapshotPanel = !_showSnapshotPanel),
                   ),
                 ),
                 Positioned(
@@ -80,13 +86,14 @@ class _CanvasScreenState extends State<CanvasScreen> {
                   left: 12,
                   child: const _StampSizePanel(),
                 ),
-                // スナップショット一覧パネル（上部中央）
-                const Positioned(
-                  top: 12,
-                  left: 12,
-                  right: 68,
-                  child: Center(child: SnapshotPanel()),
-                ),
+                // スナップショット一覧パネル（上部中央・開閉式）
+                if (_showSnapshotPanel)
+                  const Positioned(
+                    top: 12,
+                    left: 12,
+                    right: 68,
+                    child: Center(child: SnapshotPanel()),
+                  ),
                 // 選択オブジェクトのプロパティパネル（右下）
                 const Positioned(
                   bottom: 12,
@@ -360,7 +367,15 @@ class _CanvasArea extends StatelessWidget {
 class _ControlsPanel extends StatefulWidget {
   final VoidCallback? onSaveSnapshot;
   final void Function(Uint8List)? onImageProcessed;
-  const _ControlsPanel({this.onSaveSnapshot, this.onImageProcessed});
+  final bool showSnapshotPanel;
+  final VoidCallback? onToggleSnapshotPanel;
+
+  const _ControlsPanel({
+    this.onSaveSnapshot,
+    this.onImageProcessed,
+    this.showSnapshotPanel = false,
+    this.onToggleSnapshotPanel,
+  });
 
   @override
   State<_ControlsPanel> createState() => _ControlsPanelState();
@@ -376,13 +391,11 @@ class _ControlsPanelState extends State<_ControlsPanel> {
       final photoBytes = await ImageImporter.pickPhoto();
       if (photoBytes == null || !mounted) return;
 
-      // T14: 切り抜きモーダルを表示
-      final croppedBytes = await Navigator.push<Uint8List>(
-        context,
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => CropImageScreen(imageBytes: photoBytes),
-        ),
+      // T14: 切り抜きダイアログを表示
+      final croppedBytes = await showDialog<Uint8List>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => CropImageScreen(imageBytes: photoBytes),
       );
       if (croppedBytes == null || !mounted) return;
 
@@ -435,6 +448,15 @@ class _ControlsPanelState extends State<_ControlsPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ControlButton(
+            icon: Icons.near_me,
+            tooltip: '選択',
+            isHighlighted: state.selectedTool == ToolType.select,
+            onTap: () => state.selectedTool == ToolType.select
+                ? actions.setTool(ToolType.freehand)
+                : actions.setTool(ToolType.select),
+          ),
+          const _ControlDivider(),
+          _ControlButton(
             icon: Icons.grid_on,
             tooltip: '方眼',
             isHighlighted: state.showGrid,
@@ -458,6 +480,12 @@ class _ControlsPanelState extends State<_ControlsPanel> {
             icon: Icons.camera_alt,
             tooltip: 'スナップショット保存',
             onTap: widget.onSaveSnapshot,
+          ),
+          _ControlButton(
+            icon: Icons.photo_library,
+            tooltip: 'スナップショット一覧',
+            isHighlighted: widget.showSnapshotPanel,
+            onTap: widget.onToggleSnapshotPanel,
           ),
           const _ControlDivider(),
           _ControlButton(
