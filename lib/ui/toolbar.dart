@@ -94,6 +94,23 @@ class Toolbar extends StatelessWidget {
                 onTap: () => actions.setTool(ToolType.shapeStar),
               ),
               const _Divider(),
+              // 任意サイズ図形セクション
+              _SectionLabel('描画'),
+              _ToolButton(
+                icon: Icons.rectangle_outlined,
+                label: '四角形',
+                tool: ToolType.freeRect,
+                currentTool: state.selectedTool,
+                onTap: () => actions.setTool(ToolType.freeRect),
+              ),
+              _ToolButton(
+                icon: Icons.circle_outlined,
+                label: '円',
+                tool: ToolType.freeOval,
+                currentTool: state.selectedTool,
+                onTap: () => actions.setTool(ToolType.freeOval),
+              ),
+              const _Divider(),
               // カラーパレットセクション
               _SectionLabel('色'),
               for (final color in kPaletteColors)

@@ -199,6 +199,16 @@ class _CanvasArea extends StatelessWidget {
                 },
               );
             }
+            if (tool == ToolType.freeRect || tool == ToolType.freeOval) {
+              return newStroke.copyWith(
+                color: appState.selectedColor,
+                width: 3.0,
+                data: {
+                  'tool': tool == ToolType.freeRect ? 'freeRect' : 'freeOval',
+                  'layer': layerIndex,
+                },
+              );
+            }
             return null;
           },
           onStrokeUpdated: (stroke) {
@@ -208,6 +218,34 @@ class _CanvasArea extends StatelessWidget {
               return stroke.copyWith(
                 points: [stroke.points.first, stroke.points.last],
               );
+            }
+            if (tool == 'freeRect') {
+              if (stroke.points.length < 2) return stroke;
+              final start = stroke.points.first.position;
+              final end = stroke.points.last.position;
+              return stroke.copyWith(
+                points: [
+                  start,
+                  Offset(end.dx, start.dy),
+                  end,
+                  Offset(start.dx, end.dy),
+                  start, // 閉じる
+                ].map(_pt).toList(),
+              );
+            }
+            if (tool == 'freeOval') {
+              if (stroke.points.length < 2) return stroke;
+              // points には生のポインタ入力を保持し続ける。
+              // first = ドラッグ開始点（中心）、last = 現在位置（半径の基準）
+              // pathBuilder が data の cx/cy/radius を使って addOval で描画する。
+              final center = stroke.points.first.position;
+              final radius =
+                  (stroke.points.last.position - center).distance;
+              final data = Map<String, dynamic>.from(stroke.data ?? {});
+              data['cx'] = center.dx;
+              data['cy'] = center.dy;
+              data['radius'] = radius;
+              return stroke.copyWith(data: data);
             }
             return stroke;
           },
@@ -229,6 +267,21 @@ class _CanvasArea extends StatelessWidget {
               AppStateWidget.of(
                 context,
               ).onStrokeDrawn(stroke.copyWith(points: shapePoints));
+              return;
+            }
+
+            if (stroke.data?['tool'] == 'freeOval') {
+              // 消しゴムの交差判定（segmentDistance）のために
+              // points を円の輪郭点列に差し替えて保存する。
+              // pathBuilder は引き続き data の cx/cy/radius で addOval を描画する。
+              final cx = stroke.data?['cx'] as double?;
+              final cy = stroke.data?['cy'] as double?;
+              final radius = stroke.data?['radius'] as double?;
+              if (cx != null && cy != null && radius != null && radius > 0) {
+                final circlePoints = _circlePoints(Offset(cx, cy), radius);
+                AppStateWidget.of(context)
+                    .onStrokeDrawn(stroke.copyWith(points: circlePoints));
+              }
               return;
             }
 
@@ -596,6 +649,12 @@ Path _buildStrokePath(Stroke stroke) {
   if (tool == 'shape') {
     return _buildShapeOutlinePath(stroke);
   }
+  if (tool == 'freeRect') {
+    return _buildShapeOutlinePath(stroke);
+  }
+  if (tool == 'freeOval') {
+    return _buildFreeOvalPath(stroke);
+  }
   if (tool == 'eraser') {
     return Path();
   }
@@ -611,6 +670,20 @@ Path _buildShapeOutlinePath(Stroke stroke) {
   for (final point in stroke.points.skip(1)) {
     path.lineTo(point.position.dx, point.position.dy);
   }
+  return path;
+}
+
+/// freeOval の円パス（data に保存した cx/cy/radius から addOval で滑らかな円を描く）
+Path _buildFreeOvalPath(Stroke stroke) {
+  final data = stroke.data;
+  final cx = data?['cx'] as double?;
+  final cy = data?['cy'] as double?;
+  final radius = data?['radius'] as double?;
+  if (cx == null || cy == null || radius == null || radius == 0) {
+    return _buildShapeOutlinePath(stroke);
+  }
+  final path = Path();
+  path.addOval(Rect.fromCircle(center: Offset(cx, cy), radius: radius));
   return path;
 }
 
