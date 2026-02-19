@@ -371,14 +371,15 @@ lib/
 **実装内容:**
 
 - `image_object.dart` の `ImageObject` を完成させる
-- 加工済み `Uint8List` を `ui.Image` に変換してキャンバス中央に配置
-- `canvas_painter.dart` で `ImageObject` を描画
-- 配置後: 移動（ドラッグ）・リサイズ（ハンドル）が可能（T11 の選択・編集機能と連携）
+- 加工済み `Uint8List` を `Image.memory` で任意の場所に配置
+  - 配置するのは追加時のみで、あとから移動はできなくて良いです。
+  - ~`canvas_painter.dart` で `ImageObject` を描画~ `Image.memory` で Stack の一番下に配置すれば良いだけなので、`canvas_painter.dart` は完全に削除してください
+- 配置後: 移動（ドラッグ）・リサイズ（ハンドル）は不要
 - 操作を Undo スタックに積む
 
 **完了条件:**
 - 画像がキャンバスに表示される
-- ドラッグで移動・ハンドルでリサイズできる
+- 画像の「上」に他のオブジェクトが描画できる
 
 ---
 
