@@ -3,12 +3,37 @@ import 'dart:math' as math;
 import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../app_state.dart';
+import '../models/snapshot.dart';
+import '../ui/snapshot_panel.dart';
 import '../ui/toolbar.dart';
 
-class CanvasScreen extends StatelessWidget {
+class CanvasScreen extends StatefulWidget {
   const CanvasScreen({super.key});
+
+  @override
+  State<CanvasScreen> createState() => _CanvasScreenState();
+}
+
+class _CanvasScreenState extends State<CanvasScreen> {
+  final GlobalKey _repaintKey = GlobalKey();
+
+  Future<void> _saveSnapshot() async {
+    final ro = _repaintKey.currentContext?.findRenderObject();
+    if (ro is! RenderRepaintBoundary) return;
+
+    // pixelRatio を下げてサムネイル化（0.3 ≒ 30%）
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final image = await ro.toImage(pixelRatio: devicePixelRatio * 0.3);
+
+    if (!mounted) return;
+    final state = AppState.of(context).canvasState;
+    AppStateWidget.of(context).addSnapshot(
+      Snapshot(state: state, thumbnail: image, createdAt: DateTime.now()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,13 +43,28 @@ class CanvasScreen extends StatelessWidget {
         children: [
           // 左サイドツールバー
           const Toolbar(),
-          // キャンバス領域（方眼トグルボタンを右上に重ねる）
-          const Expanded(
+          // キャンバス領域
+          Expanded(
             child: Stack(
               children: [
-                _CanvasArea(),
-                Positioned(top: 12, right: 12, child: _ControlsPanel()),
-                Positioned(bottom: 12, left: 12, child: _StampSizePanel()),
+                RepaintBoundary(key: _repaintKey, child: const _CanvasArea()),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: _ControlsPanel(onSaveSnapshot: _saveSnapshot),
+                ),
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: const _StampSizePanel(),
+                ),
+                // スナップショット一覧パネル（上部中央）
+                const Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 68,
+                  child: Center(child: SnapshotPanel()),
+                ),
               ],
             ),
           ),
@@ -133,7 +173,9 @@ class _CanvasArea extends StatelessWidget {
                 color: appState.selectedColor,
                 width: 3.0,
                 data: {
-                  'tool': tool == ToolType.lineSolid ? 'lineSolid' : 'lineDashed',
+                  'tool': tool == ToolType.lineSolid
+                      ? 'lineSolid'
+                      : 'lineDashed',
                   'layer': layerIndex,
                 },
               );
@@ -179,10 +221,14 @@ class _CanvasArea extends StatelessWidget {
               final stampSize = appState.stampSize;
               final shapeTypeStr =
                   stroke.data?['shapeType'] as String? ?? 'shapeSquare';
-              final shapePoints =
-                  _generateShapePoints(shapeTypeStr, center, stampSize);
-              AppStateWidget.of(context)
-                  .onStrokeDrawn(stroke.copyWith(points: shapePoints));
+              final shapePoints = _generateShapePoints(
+                shapeTypeStr,
+                center,
+                stampSize,
+              );
+              AppStateWidget.of(
+                context,
+              ).onStrokeDrawn(stroke.copyWith(points: shapePoints));
               return;
             }
 
@@ -194,9 +240,10 @@ class _CanvasArea extends StatelessWidget {
   }
 }
 
-/// 右上コントロール領域: 方眼トグル・Undo/Redo・クリア・レイヤー切り替えをまとめたパネル
+/// 右上コントロール領域: 方眼トグル・Undo/Redo・スナップショット保存・クリア・レイヤー切り替えをまとめたパネル
 class _ControlsPanel extends StatelessWidget {
-  const _ControlsPanel();
+  final VoidCallback? onSaveSnapshot;
+  const _ControlsPanel({this.onSaveSnapshot});
 
   @override
   Widget build(BuildContext context) {
@@ -237,6 +284,12 @@ class _ControlsPanel extends StatelessWidget {
             tooltip: 'Redo',
             isEnabled: state.canRedo,
             onTap: state.canRedo ? actions.redo : null,
+          ),
+          const _ControlDivider(),
+          _ControlButton(
+            icon: Icons.camera_alt,
+            tooltip: 'スナップショット保存',
+            onTap: onSaveSnapshot,
           ),
           const _ControlDivider(),
           _ControlButton(
@@ -390,10 +443,7 @@ class _LayerRow extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 '${(opacity * 100).round()}%',
-                style: const TextStyle(
-                  color: Color(0xFF8E8E93),
-                  fontSize: 9,
-                ),
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 9),
               ),
             ],
           ),
@@ -460,13 +510,13 @@ List<StrokePoint> _generateShapePoints(
 
 /// 合成した StrokePoint を生成する（センサ値はデフォルト値）
 StrokePoint _pt(Offset position) => StrokePoint(
-      position: position,
-      pressure: 0.5,
-      pressureMin: 0.0,
-      pressureMax: 1.0,
-      tilt: 0.0,
-      orientation: 0.0,
-    );
+  position: position,
+  pressure: 0.5,
+  pressureMin: 0.0,
+  pressureMax: 1.0,
+  tilt: 0.0,
+  orientation: 0.0,
+);
 
 List<StrokePoint> _squarePoints(Offset center, double size) {
   final h = size / 2;
@@ -483,31 +533,33 @@ List<StrokePoint> _circlePoints(Offset center, double radius) {
   const segments = 36;
   return List.generate(segments + 1, (i) {
     final angle = 2 * math.pi * i / segments - math.pi / 2;
-    return _pt(Offset(
-      center.dx + radius * math.cos(angle),
-      center.dy + radius * math.sin(angle),
-    ));
+    return _pt(
+      Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      ),
+    );
   });
 }
 
 List<StrokePoint> _trianglePoints(Offset center, double size) {
   final h = size / 2;
   return [
-    Offset(center.dx, center.dy - h),        // top
-    Offset(center.dx + h, center.dy + h),     // bottomRight
-    Offset(center.dx - h, center.dy + h),     // bottomLeft
-    Offset(center.dx, center.dy - h),         // 閉じる
+    Offset(center.dx, center.dy - h), // top
+    Offset(center.dx + h, center.dy + h), // bottomRight
+    Offset(center.dx - h, center.dy + h), // bottomLeft
+    Offset(center.dx, center.dy - h), // 閉じる
   ].map(_pt).toList();
 }
 
 List<StrokePoint> _diamondPoints(Offset center, double size) {
   final h = size / 2;
   return [
-    Offset(center.dx, center.dy - h),         // top
-    Offset(center.dx + h, center.dy),         // right
-    Offset(center.dx, center.dy + h),         // bottom
-    Offset(center.dx - h, center.dy),         // left
-    Offset(center.dx, center.dy - h),         // 閉じる
+    Offset(center.dx, center.dy - h), // top
+    Offset(center.dx + h, center.dy), // right
+    Offset(center.dx, center.dy + h), // bottom
+    Offset(center.dx - h, center.dy), // left
+    Offset(center.dx, center.dy - h), // 閉じる
   ].map(_pt).toList();
 }
 
@@ -584,7 +636,11 @@ class _StampSizePanel extends StatelessWidget {
         color: const Color(0xF02C2C2E),
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
-          BoxShadow(color: Color(0x44000000), blurRadius: 8, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Color(0x44000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),

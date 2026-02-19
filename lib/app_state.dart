@@ -2,8 +2,10 @@ import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/material.dart';
 
 import 'history/canvas_history.dart';
+import 'history/snapshot_manager.dart';
 import 'models/canvas_state.dart';
 import 'models/draw_object.dart';
+import 'models/snapshot.dart';
 
 /// 描画ツールの種類
 enum ToolType {
@@ -50,6 +52,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
   CanvasState _canvasState = const CanvasState();
   final _history = CanvasHistory();
 
+  // ── スナップショット状態 ────────────────────────────────────────────────────
+  final _snapshotManager = SnapshotManager();
+  List<Snapshot> _snapshots = const [];
+
   // ── UI 状態 ────────────────────────────────────────────────────────────────
   ToolType _selectedTool = ToolType.freehand;
   Color _selectedColor = Colors.black;
@@ -74,6 +80,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   double get layerBOpacity => _layerBOpacity;
   bool get showGrid => _showGrid;
   double get stampSize => _stampSize;
+  List<Snapshot> get snapshots => _snapshots;
 
   // ── キャンバス操作 ──────────────────────────────────────────────────────────
 
@@ -150,6 +157,24 @@ class AppStateWidgetState extends State<AppStateWidget> {
     if (next != null) setState(() => _canvasState = next);
   }
 
+  // ── スナップショット操作 ────────────────────────────────────────────────────
+
+  /// 現在のキャンバス状態をサムネイルとともにスナップショットとして保存する。
+  void addSnapshot(Snapshot snapshot) {
+    setState(() {
+      _snapshotManager.add(snapshot);
+      _snapshots = List.unmodifiable(_snapshotManager.snapshots);
+    });
+  }
+
+  /// スナップショットを復元する（現在の状態を Undo スタックに積む）。
+  void restoreSnapshot(Snapshot snapshot) {
+    setState(() {
+      _history.push(_canvasState);
+      _canvasState = snapshot.state;
+    });
+  }
+
   // ── UI 操作 ────────────────────────────────────────────────────────────────
 
   void setTool(ToolType tool) => setState(() => _selectedTool = tool);
@@ -175,6 +200,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
       layerBOpacity: _layerBOpacity,
       showGrid: _showGrid,
       stampSize: _stampSize,
+      snapshots: _snapshots,
       child: widget.child,
     );
   }
@@ -193,6 +219,7 @@ class AppState extends InheritedWidget {
   final double layerBOpacity;
   final bool showGrid;
   final double stampSize;
+  final List<Snapshot> snapshots;
 
   const AppState({
     super.key,
@@ -206,6 +233,7 @@ class AppState extends InheritedWidget {
     required this.layerBOpacity,
     required this.showGrid,
     required this.stampSize,
+    required this.snapshots,
     required super.child,
   });
 
@@ -224,6 +252,6 @@ class AppState extends InheritedWidget {
       layerAOpacity != oldWidget.layerAOpacity ||
       layerBOpacity != oldWidget.layerBOpacity ||
       showGrid != oldWidget.showGrid ||
-      stampSize != oldWidget.stampSize;
+      stampSize != oldWidget.stampSize ||
+      snapshots != oldWidget.snapshots;
 }
-
