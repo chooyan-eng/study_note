@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import '../app_state.dart';
 import '../canvas/selection_handler.dart';
 import '../image/image_importer.dart';
+import '../models/image_object.dart';
 import '../models/snapshot.dart';
 import '../ui/snapshot_panel.dart';
 import '../ui/toolbar.dart';
@@ -100,6 +101,19 @@ class _CanvasArea extends StatelessWidget {
 
     return Stack(
       children: [
+        // 画像オブジェクト（最下層・T16）
+        for (final obj in appState.canvasState.objects)
+          if (obj is ImageObject)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Image.memory(
+                  obj.imageBytes,
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
+              ),
+            ),
+
         // 方眼表示（IgnorePointer で入力は Draw へ透過）
         if (appState.showGrid)
           Positioned.fill(
@@ -355,8 +369,8 @@ class _ControlsPanelState extends State<_ControlsPanel> {
       }
       if (!mounted) return;
 
-      // T16: キャンバスへの貼り付けへ続く（processedBytes を使用）
-      debugPrint('T15 complete: processed ${processedBytes.length} bytes');
+      // T16: アクティブレイヤーに ImageObject として貼り付け
+      AppStateWidget.of(context).addImageObject(processedBytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

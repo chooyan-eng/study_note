@@ -6,7 +6,7 @@ class CanvasState {
   /// フリーハンドストローク（draw_your_image の Draw ウィジェットが描画）
   final List<Stroke> strokes;
 
-  /// その他オブジェクト（直線・図形・画像など。CanvasPainter が描画）
+  /// 画像オブジェクト（Image.memory で Stack 最下層に描画）
   final List<DrawObject> objects;
 
   const CanvasState({this.strokes = const [], this.objects = const []});
