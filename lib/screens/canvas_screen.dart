@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 
 import '../app_state.dart';
 import '../canvas/selection_handler.dart';
+import '../image/image_importer.dart';
 import '../models/snapshot.dart';
 import '../ui/snapshot_panel.dart';
 import '../ui/toolbar.dart';
@@ -310,9 +311,33 @@ class _CanvasArea extends StatelessWidget {
 }
 
 /// 右上コントロール領域: 方眼トグル・Undo/Redo・スナップショット保存・クリア・レイヤー切り替えをまとめたパネル
-class _ControlsPanel extends StatelessWidget {
+class _ControlsPanel extends StatefulWidget {
   final VoidCallback? onSaveSnapshot;
   const _ControlsPanel({this.onSaveSnapshot});
+
+  @override
+  State<_ControlsPanel> createState() => _ControlsPanelState();
+}
+
+class _ControlsPanelState extends State<_ControlsPanel> {
+  bool _isImporting = false;
+
+  Future<void> _importPhoto() async {
+    if (_isImporting) return;
+    setState(() => _isImporting = true);
+    try {
+      await ImageImporter.pickPhoto();
+      // T14以降: 切り抜き→加工→貼り付けへ続く
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('カメラエラー: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -358,7 +383,13 @@ class _ControlsPanel extends StatelessWidget {
           _ControlButton(
             icon: Icons.camera_alt,
             tooltip: 'スナップショット保存',
-            onTap: onSaveSnapshot,
+            onTap: widget.onSaveSnapshot,
+          ),
+          const _ControlDivider(),
+          _ControlButton(
+            icon: _isImporting ? Icons.hourglass_empty : Icons.add_photo_alternate,
+            tooltip: '写真を撮影して取り込む',
+            onTap: _isImporting ? null : _importPhoto,
           ),
           const _ControlDivider(),
           _ControlButton(
