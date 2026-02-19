@@ -924,7 +924,7 @@ class _SelectionOverlayState extends State<_SelectionOverlay> {
       behavior: HitTestBehavior.opaque,
       onTapDown: (details) {
         final pos = details.localPosition;
-        final found = SelectionHandler.findStrokeAt(
+        final found = StrokeSelectionHandler.findStrokeAt(
           pos,
           appState.canvasState.strokes,
           appState.activeLayer,
@@ -951,7 +951,7 @@ class _SelectionOverlayState extends State<_SelectionOverlay> {
         }
 
         // ボディ上か確認
-        if (SelectionHandler.hitTest(pos, selected)) {
+        if (StrokeSelectionHandler.hitTest(pos, selected)) {
           _activeHandle = -2; // ボディ移動
         } else {
           _activeHandle = -1;
@@ -1085,7 +1085,7 @@ class _SelectionPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (selected == null) return;
 
-    final bounds = SelectionHandler.getBounds(selected!).inflate(8);
+    final bounds = StrokeSelectionHandler.getBounds(selected!).inflate(8);
 
     // バウンディングボックス（青い枠線）
     final boxPaint = Paint()
@@ -1306,14 +1306,14 @@ class _SelectionPropertyPanel extends StatelessWidget {
     final sizeInData = stroke.data?['size'] as double?;
     if (sizeInData != null) return sizeInData;
     // data に size がない場合はバウンディング幅から推算
-    final bounds = SelectionHandler.getBounds(stroke);
+    final bounds = StrokeSelectionHandler.getBounds(stroke);
     return math.max(bounds.width, bounds.height).clamp(30.0, 200.0);
   }
 
   void _resizeStamp(BuildContext context, Stroke stroke, double newSize) {
     final shapeType =
         stroke.data?['shapeType'] as String? ?? 'shapeSquare';
-    final bounds = SelectionHandler.getBounds(stroke);
+    final bounds = StrokeSelectionHandler.getBounds(stroke);
     final center = bounds.center;
     final newPoints = _generateShapePoints(shapeType, center, newSize);
     final newData = Map<String, dynamic>.from(stroke.data!);

@@ -4,7 +4,7 @@ import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/material.dart';
 
 /// オブジェクト選択のヒットテストとバウンディング計算を担うユーティリティクラス。
-class SelectionHandler {
+class StrokeSelectionHandler {
   static const double hitThreshold = 20.0;
 
   /// [strokes] 中でアクティブレイヤーの [pos] に最も近い（前面の）Stroke を返す。
