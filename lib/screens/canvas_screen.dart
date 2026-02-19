@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -11,6 +12,7 @@ import '../image/image_importer.dart';
 import '../models/snapshot.dart';
 import '../ui/snapshot_panel.dart';
 import '../ui/toolbar.dart';
+import 'crop_image_screen.dart';
 
 class CanvasScreen extends StatefulWidget {
   const CanvasScreen({super.key});
@@ -326,8 +328,20 @@ class _ControlsPanelState extends State<_ControlsPanel> {
     if (_isImporting) return;
     setState(() => _isImporting = true);
     try {
-      await ImageImporter.pickPhoto();
-      // T14以降: 切り抜き→加工→貼り付けへ続く
+      final photoBytes = await ImageImporter.pickPhoto();
+      if (photoBytes == null || !mounted) return;
+
+      // T14: 切り抜きモーダルを表示
+      final croppedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => CropImageScreen(imageBytes: photoBytes),
+        ),
+      );
+      if (croppedBytes == null) return;
+
+      // T15以降: 加工→貼り付けへ続く
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
