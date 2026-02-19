@@ -69,6 +69,9 @@ class AppStateWidgetState extends State<AppStateWidget> {
   /// 1回の消しゴムストローク中に history を push したかどうか
   bool _eraserHistoryPushed = false;
 
+  // ── 選択状態 (T11) ──────────────────────────────────────────────────────────
+  Stroke? _selectedStroke;
+
   // ── Getters ────────────────────────────────────────────────────────────────
   CanvasState get canvasState => _canvasState;
   bool get canUndo => _history.canUndo;
@@ -81,6 +84,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   bool get showGrid => _showGrid;
   double get stampSize => _stampSize;
   List<Snapshot> get snapshots => _snapshots;
+  Stroke? get selectedStroke => _selectedStroke;
 
   // ── キャンバス操作 ──────────────────────────────────────────────────────────
 
@@ -139,6 +143,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
   void clearCanvas() {
     setState(() {
       _history.clear();
+      _selectedStroke = null;
       _canvasState = _canvasState.copyWith(
         strokes: _canvasState.strokes
             .where((s) => (s.data?['layer'] as int? ?? 0) != _activeLayer)
@@ -149,12 +154,59 @@ class AppStateWidgetState extends State<AppStateWidget> {
 
   void undo() {
     final prev = _history.undo(_canvasState);
-    if (prev != null) setState(() => _canvasState = prev);
+    if (prev != null) {
+      setState(() {
+        _canvasState = prev;
+        _selectedStroke = null;
+      });
+    }
   }
 
   void redo() {
     final next = _history.redo(_canvasState);
-    if (next != null) setState(() => _canvasState = next);
+    if (next != null) {
+      setState(() {
+        _canvasState = next;
+        _selectedStroke = null;
+      });
+    }
+  }
+
+  // ── 選択操作 (T11) ──────────────────────────────────────────────────────────
+
+  /// 選択中のストロークをセットする。null を渡すと選択解除。
+  void selectStroke(Stroke? stroke) => setState(() => _selectedStroke = stroke);
+
+  /// 現在の状態を Undo スタックに積む（ドラッグ開始時などに1度だけ呼ぶ）。
+  void pushHistory() => _history.push(_canvasState);
+
+  /// 選択中ストロークを [updated] で置き換える。
+  /// [pushHistory] が true の場合は Undo スタックにも積む（プロパティ変更時）。
+  void updateSelectedStroke(Stroke updated, {bool pushHistory = true}) {
+    if (_selectedStroke == null) return;
+    setState(() {
+      if (pushHistory) _history.push(_canvasState);
+      _canvasState = _canvasState.copyWith(
+        strokes: _canvasState.strokes
+            .map((s) => identical(s, _selectedStroke) ? updated : s)
+            .toList(),
+      );
+      _selectedStroke = updated;
+    });
+  }
+
+  /// 選択中ストロークを削除して選択解除する。Undo スタックに積む。
+  void deleteSelectedStroke() {
+    if (_selectedStroke == null) return;
+    final target = _selectedStroke;
+    setState(() {
+      _history.push(_canvasState);
+      _canvasState = _canvasState.copyWith(
+        strokes:
+            _canvasState.strokes.where((s) => !identical(s, target)).toList(),
+      );
+      _selectedStroke = null;
+    });
   }
 
   // ── スナップショット操作 ────────────────────────────────────────────────────
@@ -177,7 +229,10 @@ class AppStateWidgetState extends State<AppStateWidget> {
 
   // ── UI 操作 ────────────────────────────────────────────────────────────────
 
-  void setTool(ToolType tool) => setState(() => _selectedTool = tool);
+  void setTool(ToolType tool) => setState(() {
+        _selectedTool = tool;
+        if (tool != ToolType.select) _selectedStroke = null;
+      });
   void setColor(Color color) => setState(() => _selectedColor = color);
   void setLayer(int layer) => setState(() => _activeLayer = layer);
   void setLayerOpacity(int layer, double opacity) => setState(() {
@@ -201,6 +256,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
       showGrid: _showGrid,
       stampSize: _stampSize,
       snapshots: _snapshots,
+      selectedStroke: _selectedStroke,
       child: widget.child,
     );
   }
@@ -220,6 +276,7 @@ class AppState extends InheritedWidget {
   final bool showGrid;
   final double stampSize;
   final List<Snapshot> snapshots;
+  final Stroke? selectedStroke;
 
   const AppState({
     super.key,
@@ -234,6 +291,7 @@ class AppState extends InheritedWidget {
     required this.showGrid,
     required this.stampSize,
     required this.snapshots,
+    required this.selectedStroke,
     required super.child,
   });
 
@@ -253,5 +311,6 @@ class AppState extends InheritedWidget {
       layerBOpacity != oldWidget.layerBOpacity ||
       showGrid != oldWidget.showGrid ||
       stampSize != oldWidget.stampSize ||
-      snapshots != oldWidget.snapshots;
+      snapshots != oldWidget.snapshots ||
+      !identical(selectedStroke, oldWidget.selectedStroke);
 }

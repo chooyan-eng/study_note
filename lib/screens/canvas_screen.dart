@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../app_state.dart';
+import '../canvas/selection_handler.dart';
 import '../models/snapshot.dart';
 import '../ui/snapshot_panel.dart';
 import '../ui/toolbar.dart';
@@ -65,6 +66,12 @@ class _CanvasScreenState extends State<CanvasScreen> {
                   right: 68,
                   child: Center(child: SnapshotPanel()),
                 ),
+                // 選択オブジェクトのプロパティパネル（右下）
+                const Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: _SelectionPropertyPanel(),
+                ),
               ],
             ),
           ),
@@ -120,6 +127,10 @@ class _CanvasArea extends StatelessWidget {
           layerStrokes: layerBStrokes,
           opacity: appState.layerBOpacity,
         ),
+
+        // 選択オーバーレイ（選択ツール時のみ）
+        if (appState.selectedTool == ToolType.select)
+          Positioned.fill(child: _SelectionOverlay(appState: appState)),
       ],
     );
   }
@@ -135,11 +146,13 @@ class _CanvasArea extends StatelessWidget {
   }) {
     final isEraser = appState.selectedTool == ToolType.eraser;
     final isActive = appState.activeLayer == layerIndex;
+    // 選択ツール時は _SelectionOverlay がイベントを担当するため Draw は無効化する。
+    final isSelectTool = appState.selectedTool == ToolType.select;
 
     // 非アクティブレイヤーは IgnorePointer でポインタイベントを完全遮断するため、
     // コールバックに isActive 判定は不要。
     return IgnorePointer(
-      ignoring: !isActive,
+      ignoring: !isActive || isSelectTool,
       child: Opacity(
         opacity: opacity,
         child: Draw(
@@ -264,9 +277,12 @@ class _CanvasArea extends StatelessWidget {
                 center,
                 stampSize,
               );
-              AppStateWidget.of(
-                context,
-              ).onStrokeDrawn(stroke.copyWith(points: shapePoints));
+              // サイズを data に保存して、選択後のリサイズに使用できるようにする
+              final newData = Map<String, dynamic>.from(stroke.data!);
+              newData['size'] = stampSize;
+              AppStateWidget.of(context).onStrokeDrawn(
+                stroke.copyWith(points: shapePoints, data: newData),
+              );
               return;
             }
 
@@ -839,4 +855,509 @@ Path _buildDashedLinePath(
     distance = endDistance + gapLength;
   }
   return path;
+}
+
+// ─── 選択オーバーレイ (T11) ───────────────────────────────────────────────────
+
+/// リサイズハンドルの半径（px）
+const double _handleRadius = 8.0;
+
+/// ハンドルへのヒット判定距離（px）
+const double _handleHitRadius = 16.0;
+
+/// 選択中ストロークの種別に応じたハンドル位置リストを返す。
+/// 直線: [start, end], freeRect: [TL, TR, BR, BL], freeOval: [右端]
+/// フリーハンド・スタンプ: [] （ハンドルなし）
+List<Offset> _getSelectionHandles(Stroke stroke) {
+  final tool = stroke.data?['tool'] as String?;
+  switch (tool) {
+    case 'lineSolid':
+    case 'lineDashed':
+      if (stroke.points.length >= 2) {
+        return [
+          stroke.points.first.position,
+          stroke.points.last.position,
+        ];
+      }
+      return [];
+    case 'freeRect':
+      if (stroke.points.length >= 4) {
+        return [
+          stroke.points[0].position, // TL
+          stroke.points[1].position, // TR
+          stroke.points[2].position, // BR
+          stroke.points[3].position, // BL
+        ];
+      }
+      return [];
+    case 'freeOval':
+      final cx = stroke.data?['cx'] as double? ?? 0;
+      final cy = stroke.data?['cy'] as double? ?? 0;
+      final r = stroke.data?['radius'] as double? ?? 0;
+      return [Offset(cx + r, cy)]; // 右端に1ハンドル
+    default:
+      return []; // freehand / shape: ハンドルなし
+  }
+}
+
+/// 選択ツール時のオーバーレイ: タップ選択・ドラッグ移動・ハンドルリサイズを処理する。
+class _SelectionOverlay extends StatefulWidget {
+  final AppState appState;
+  const _SelectionOverlay({required this.appState});
+
+  @override
+  State<_SelectionOverlay> createState() => _SelectionOverlayState();
+}
+
+class _SelectionOverlayState extends State<_SelectionOverlay> {
+  /// ドラッグ中のハンドルインデックス（-1=ハンドルなし, -2=ボディ移動）
+  int _activeHandle = -1;
+  Offset? _lastPan;
+  bool _historyPushedForDrag = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = widget.appState;
+    final selected = appState.selectedStroke;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        final pos = details.localPosition;
+        final found = SelectionHandler.findStrokeAt(
+          pos,
+          appState.canvasState.strokes,
+          appState.activeLayer,
+        );
+        AppStateWidget.of(context).selectStroke(found);
+      },
+      onPanStart: (details) {
+        final pos = details.localPosition;
+        _lastPan = pos;
+        _historyPushedForDrag = false;
+
+        if (selected == null) {
+          _activeHandle = -1;
+          return;
+        }
+
+        // ハンドルに近いか確認
+        final handles = _getSelectionHandles(selected);
+        for (int i = 0; i < handles.length; i++) {
+          if ((handles[i] - pos).distance <= _handleHitRadius) {
+            _activeHandle = i;
+            return;
+          }
+        }
+
+        // ボディ上か確認
+        if (SelectionHandler.hitTest(pos, selected)) {
+          _activeHandle = -2; // ボディ移動
+        } else {
+          _activeHandle = -1;
+        }
+      },
+      onPanUpdate: (details) {
+        final selected = widget.appState.selectedStroke;
+        if (selected == null || _lastPan == null) return;
+        if (_activeHandle == -1) return;
+
+        final pos = details.localPosition;
+        final delta = pos - _lastPan!;
+        _lastPan = pos;
+
+        // 初回ドラッグ時に履歴を1度だけ積む
+        if (!_historyPushedForDrag) {
+          AppStateWidget.of(context).pushHistory();
+          _historyPushedForDrag = true;
+        }
+
+        if (_activeHandle == -2) {
+          _moveStroke(context, selected, delta);
+        } else {
+          _resizeByHandle(context, selected, _activeHandle, pos);
+        }
+      },
+      onPanEnd: (_) {
+        _activeHandle = -1;
+        _lastPan = null;
+        _historyPushedForDrag = false;
+      },
+      child: CustomPaint(
+        painter: _SelectionPainter(selected: selected),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+
+  void _moveStroke(BuildContext context, Stroke stroke, Offset delta) {
+    final tool = stroke.data?['tool'] as String?;
+
+    final newPoints =
+        stroke.points.map((p) => _pt(p.position + delta)).toList();
+
+    Map<String, dynamic>? newData;
+    if (tool == 'freeOval') {
+      final cx = (stroke.data?['cx'] as double? ?? 0) + delta.dx;
+      final cy = (stroke.data?['cy'] as double? ?? 0) + delta.dy;
+      newData = Map<String, dynamic>.from(stroke.data!);
+      newData['cx'] = cx;
+      newData['cy'] = cy;
+    }
+
+    final updated = newData != null
+        ? stroke.copyWith(points: newPoints, data: newData)
+        : stroke.copyWith(points: newPoints);
+
+    AppStateWidget.of(context).updateSelectedStroke(updated, pushHistory: false);
+  }
+
+  void _resizeByHandle(
+    BuildContext context,
+    Stroke stroke,
+    int handleIndex,
+    Offset newPos,
+  ) {
+    final tool = stroke.data?['tool'] as String?;
+    Stroke updated;
+
+    if (tool == 'lineSolid' || tool == 'lineDashed') {
+      final pts = stroke.points;
+      if (pts.length < 2) return;
+      if (handleIndex == 0) {
+        updated = stroke.copyWith(points: [_pt(newPos), pts.last]);
+      } else {
+        updated = stroke.copyWith(points: [pts.first, _pt(newPos)]);
+      }
+    } else if (tool == 'freeRect') {
+      final pts = stroke.points;
+      if (pts.length < 4) return;
+      Offset tl = pts[0].position;
+      Offset tr = pts[1].position;
+      Offset br = pts[2].position;
+      Offset bl = pts[3].position;
+
+      switch (handleIndex) {
+        case 0: // TL
+          tl = newPos;
+          tr = Offset(tr.dx, newPos.dy);
+          bl = Offset(newPos.dx, bl.dy);
+        case 1: // TR
+          tr = newPos;
+          tl = Offset(tl.dx, newPos.dy);
+          br = Offset(newPos.dx, br.dy);
+        case 2: // BR
+          br = newPos;
+          tr = Offset(newPos.dx, tr.dy);
+          bl = Offset(bl.dx, newPos.dy);
+        case 3: // BL
+          bl = newPos;
+          tl = Offset(newPos.dx, tl.dy);
+          br = Offset(br.dx, newPos.dy);
+      }
+      updated = stroke.copyWith(
+        points: [tl, tr, br, bl, tl].map(_pt).toList(),
+      );
+    } else if (tool == 'freeOval') {
+      final cx = stroke.data?['cx'] as double? ?? 0;
+      final cy = stroke.data?['cy'] as double? ?? 0;
+      final center = Offset(cx, cy);
+      final newRadius = math.max(4.0, (newPos - center).distance);
+      final circlePoints = _circlePoints(center, newRadius);
+      final newData = Map<String, dynamic>.from(stroke.data!);
+      newData['radius'] = newRadius;
+      updated = stroke.copyWith(points: circlePoints, data: newData);
+    } else {
+      return;
+    }
+
+    AppStateWidget.of(context).updateSelectedStroke(updated, pushHistory: false);
+  }
+}
+
+/// 選択中ストロークのバウンディングボックスとハンドルを描画する CustomPainter。
+class _SelectionPainter extends CustomPainter {
+  final Stroke? selected;
+
+  const _SelectionPainter({required this.selected});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (selected == null) return;
+
+    final bounds = SelectionHandler.getBounds(selected!).inflate(8);
+
+    // バウンディングボックス（青い枠線）
+    final boxPaint = Paint()
+      ..color = const Color(0xFF0A84FF)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    canvas.drawRect(bounds, boxPaint);
+
+    // ハンドル
+    final handles = _getSelectionHandles(selected!);
+    final fillPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final borderPaint = Paint()
+      ..color = const Color(0xFF0A84FF)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    for (final h in handles) {
+      canvas.drawCircle(h, _handleRadius, fillPaint);
+      canvas.drawCircle(h, _handleRadius, borderPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SelectionPainter old) =>
+      !identical(selected, old.selected);
+}
+
+// ─── 選択プロパティパネル (T11) ───────────────────────────────────────────────
+
+/// 選択中ストロークがある場合に右下に表示するプロパティ編集パネル。
+/// 色変更・直線種別切替・スタンプサイズ調整・削除ボタンを含む。
+class _SelectionPropertyPanel extends StatelessWidget {
+  const _SelectionPropertyPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = AppState.of(context);
+    final selected = appState.selectedStroke;
+    if (selected == null || appState.selectedTool != ToolType.select) {
+      return const SizedBox.shrink();
+    }
+
+    final tool = selected.data?['tool'] as String?;
+    final isLine = tool == 'lineSolid' || tool == 'lineDashed';
+    final isStamp = tool == 'shape';
+
+    return Container(
+      width: 200,
+      decoration: BoxDecoration(
+        color: const Color(0xF02C2C2E),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x44000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── 色パレット ──
+          const Text(
+            '色',
+            style: TextStyle(color: Color(0xFF8E8E93), fontSize: 10),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: kPaletteColors.map((color) {
+              final isSelected = selected.color == color;
+              return GestureDetector(
+                onTap: () {
+                  final updated = selected.copyWith(color: color);
+                  AppStateWidget.of(context).updateSelectedStroke(updated);
+                },
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 2.5)
+                        : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withAlpha(128),
+                              blurRadius: 4,
+                            ),
+                          ]
+                        : null,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+
+          // ── 直線種別切替（直線ツールのみ）──
+          if (isLine) ...[
+            const SizedBox(height: 10),
+            const Text(
+              '線種',
+              style: TextStyle(color: Color(0xFF8E8E93), fontSize: 10),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _LineTypeButton(
+                  label: '実線',
+                  isSelected: tool == 'lineSolid',
+                  onTap: () {
+                    final newData =
+                        Map<String, dynamic>.from(selected.data!);
+                    newData['tool'] = 'lineSolid';
+                    AppStateWidget.of(context).updateSelectedStroke(
+                      selected.copyWith(data: newData),
+                    );
+                  },
+                ),
+                const SizedBox(width: 6),
+                _LineTypeButton(
+                  label: '破線',
+                  isSelected: tool == 'lineDashed',
+                  onTap: () {
+                    final newData =
+                        Map<String, dynamic>.from(selected.data!);
+                    newData['tool'] = 'lineDashed';
+                    AppStateWidget.of(context).updateSelectedStroke(
+                      selected.copyWith(data: newData),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+
+          // ── スタンプサイズスライダー（スタンプのみ）──
+          if (isStamp) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'サイズ',
+              style: TextStyle(color: Color(0xFF8E8E93), fontSize: 10),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_currentStampSize(selected).round()} px',
+              style: const TextStyle(
+                color: Color(0xFFAEAEB2),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: const Color(0xFF0A84FF),
+                inactiveTrackColor: const Color(0xFF48484A),
+                thumbColor: const Color(0xFF0A84FF),
+                overlayColor: const Color(0x290A84FF),
+                trackHeight: 3,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 7),
+              ),
+              child: SizedBox(
+                height: 28,
+                child: Slider(
+                  value: _currentStampSize(selected).clamp(30.0, 200.0),
+                  min: 30,
+                  max: 200,
+                  onChanged: (newSize) {
+                    _resizeStamp(context, selected, newSize);
+                  },
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+
+          // ── 削除ボタン ──
+          GestureDetector(
+            onTap: () => AppStateWidget.of(context).deleteSelectedStroke(),
+            child: Container(
+              width: double.infinity,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF3B30).withAlpha(40),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFFF3B30),
+                  width: 1,
+                ),
+              ),
+              child: const Center(
+                child: Text(
+                  '削除',
+                  style: TextStyle(
+                    color: Color(0xFFFF3B30),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _currentStampSize(Stroke stroke) {
+    final sizeInData = stroke.data?['size'] as double?;
+    if (sizeInData != null) return sizeInData;
+    // data に size がない場合はバウンディング幅から推算
+    final bounds = SelectionHandler.getBounds(stroke);
+    return math.max(bounds.width, bounds.height).clamp(30.0, 200.0);
+  }
+
+  void _resizeStamp(BuildContext context, Stroke stroke, double newSize) {
+    final shapeType =
+        stroke.data?['shapeType'] as String? ?? 'shapeSquare';
+    final bounds = SelectionHandler.getBounds(stroke);
+    final center = bounds.center;
+    final newPoints = _generateShapePoints(shapeType, center, newSize);
+    final newData = Map<String, dynamic>.from(stroke.data!);
+    newData['size'] = newSize;
+    AppStateWidget.of(context).updateSelectedStroke(
+      stroke.copyWith(points: newPoints, data: newData),
+      pushHistory: false,
+    );
+  }
+}
+
+/// 直線種別切替ボタン（実線 / 破線）
+class _LineTypeButton extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _LineTypeButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF0A84FF)
+              : const Color(0xFF3A3A3C),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFFAEAEB2),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
 }
