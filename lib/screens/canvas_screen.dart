@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -1536,6 +1537,17 @@ class _ImagePlacementOverlayState extends State<_ImagePlacementOverlay> {
 
   Rect _rect = Rect.zero;
   bool _initialized = false;
+  double? _aspectRatio; // image width / height
+
+  @override
+  void initState() {
+    super.initState();
+    // 画像のアスペクト比を非同期で取得する
+    ui.decodeImageFromList(widget.imageBytes, (ui.Image img) {
+      if (!mounted) return;
+      setState(() => _aspectRatio = img.width / img.height);
+    });
+  }
 
   void _move(Offset delta) => setState(() => _rect = _rect.shift(delta));
 
@@ -1567,13 +1579,21 @@ class _ImagePlacementOverlayState extends State<_ImagePlacementOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    // アスペクト比が取得できていなければローディング表示
+    if (_aspectRatio == null) {
+      return const ColoredBox(
+        color: Color(0x99000000),
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 初回ビルド時にキャンバス中央・幅50%でデフォルト rect を設定
+        // 初回ビルド時: 幅 50% × アスペクト比で高さを決定して中央配置
         if (!_initialized) {
           _initialized = true;
           final w = constraints.maxWidth * 0.5;
-          final h = constraints.maxHeight * 0.5;
+          final h = w / _aspectRatio!;
           _rect = Rect.fromCenter(
             center: Offset(constraints.maxWidth / 2, constraints.maxHeight / 2),
             width: w,
