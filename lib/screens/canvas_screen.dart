@@ -25,6 +25,19 @@ class CanvasScreen extends StatefulWidget {
 class _CanvasScreenState extends State<CanvasScreen> {
   final GlobalKey _repaintKey = GlobalKey();
 
+  // 画像配置確定前の一時保持バイト列（null = オーバーレイ非表示）
+  Uint8List? _pendingImageBytes;
+
+  void _onImageProcessed(Uint8List bytes) =>
+      setState(() => _pendingImageBytes = bytes);
+
+  void _confirmImagePlacement(Rect bounds) {
+    AppStateWidget.of(context).addImageObject(_pendingImageBytes!, bounds);
+    setState(() => _pendingImageBytes = null);
+  }
+
+  void _cancelImagePlacement() => setState(() => _pendingImageBytes = null);
+
   Future<void> _saveSnapshot() async {
     final ro = _repaintKey.currentContext?.findRenderObject();
     if (ro is! RenderRepaintBoundary) return;
@@ -56,7 +69,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
                 Positioned(
                   top: 12,
                   right: 12,
-                  child: _ControlsPanel(onSaveSnapshot: _saveSnapshot),
+                  child: _ControlsPanel(
+                    onSaveSnapshot: _saveSnapshot,
+                    onImageProcessed: _onImageProcessed,
+                  ),
                 ),
                 Positioned(
                   bottom: 12,
@@ -76,6 +92,15 @@ class _CanvasScreenState extends State<CanvasScreen> {
                   right: 12,
                   child: _SelectionPropertyPanel(),
                 ),
+                // 画像配置オーバーレイ（移動・リサイズ → 確定）
+                if (_pendingImageBytes != null)
+                  Positioned.fill(
+                    child: _ImagePlacementOverlay(
+                      imageBytes: _pendingImageBytes!,
+                      onConfirm: _confirmImagePlacement,
+                      onCancel: _cancelImagePlacement,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -104,11 +129,15 @@ class _CanvasArea extends StatelessWidget {
         // 画像オブジェクト（最下層・T16）
         for (final obj in appState.canvasState.objects)
           if (obj is ImageObject)
-            Positioned.fill(
+            Positioned(
+              left: obj.bounds.left,
+              top: obj.bounds.top,
+              width: obj.bounds.width,
+              height: obj.bounds.height,
               child: IgnorePointer(
                 child: Image.memory(
                   obj.imageBytes,
-                  fit: BoxFit.contain,
+                  fit: BoxFit.fill,
                   gaplessPlayback: true,
                 ),
               ),
@@ -329,7 +358,8 @@ class _CanvasArea extends StatelessWidget {
 /// 右上コントロール領域: 方眼トグル・Undo/Redo・スナップショット保存・クリア・レイヤー切り替えをまとめたパネル
 class _ControlsPanel extends StatefulWidget {
   final VoidCallback? onSaveSnapshot;
-  const _ControlsPanel({this.onSaveSnapshot});
+  final void Function(Uint8List)? onImageProcessed;
+  const _ControlsPanel({this.onSaveSnapshot, this.onImageProcessed});
 
   @override
   State<_ControlsPanel> createState() => _ControlsPanelState();
@@ -369,8 +399,8 @@ class _ControlsPanelState extends State<_ControlsPanel> {
       }
       if (!mounted) return;
 
-      // T16: アクティブレイヤーに ImageObject として貼り付け
-      AppStateWidget.of(context).addImageObject(processedBytes);
+      // T16: 配置オーバーレイを表示（移動・リサイズ → 確定で CanvasState へ追加）
+      widget.onImageProcessed?.call(processedBytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1474,6 +1504,192 @@ class _LineTypeButton extends StatelessWidget {
           style: TextStyle(
             color: isSelected ? Colors.white : const Color(0xFFAEAEB2),
             fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 画像配置オーバーレイ ──────────────────────────────────────────────────────
+
+/// 加工済み画像を移動・リサイズしてキャンバスへの配置位置を確定するオーバーレイ。
+/// 確定ボタンタップで [onConfirm] が [Rect] を返し、キャンセルで [onCancel] を呼ぶ。
+class _ImagePlacementOverlay extends StatefulWidget {
+  final Uint8List imageBytes;
+  final void Function(Rect bounds) onConfirm;
+  final VoidCallback onCancel;
+
+  const _ImagePlacementOverlay({
+    required this.imageBytes,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  State<_ImagePlacementOverlay> createState() => _ImagePlacementOverlayState();
+}
+
+class _ImagePlacementOverlayState extends State<_ImagePlacementOverlay> {
+  static const double _handleSize = 24.0;
+
+  Rect _rect = Rect.zero;
+  bool _initialized = false;
+
+  void _move(Offset delta) => setState(() => _rect = _rect.shift(delta));
+
+  void _resizeCorner(int corner, Offset delta) {
+    setState(() {
+      double l = _rect.left;
+      double t = _rect.top;
+      double r = _rect.right;
+      double b = _rect.bottom;
+
+      switch (corner) {
+        case 0: l += delta.dx; t += delta.dy; // topLeft
+        case 1: r += delta.dx; t += delta.dy; // topRight
+        case 2: l += delta.dx; b += delta.dy; // bottomLeft
+        case 3: r += delta.dx; b += delta.dy; // bottomRight
+      }
+
+      // 最小サイズ 80px
+      if (r - l < 80) {
+        if (corner == 0 || corner == 2) l = r - 80; else r = l + 80;
+      }
+      if (b - t < 80) {
+        if (corner == 0 || corner == 1) t = b - 80; else b = t + 80;
+      }
+
+      _rect = Rect.fromLTRB(l, t, r, b);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 初回ビルド時にキャンバス中央・幅50%でデフォルト rect を設定
+        if (!_initialized) {
+          _initialized = true;
+          final w = constraints.maxWidth * 0.5;
+          final h = constraints.maxHeight * 0.5;
+          _rect = Rect.fromCenter(
+            center: Offset(constraints.maxWidth / 2, constraints.maxHeight / 2),
+            width: w,
+            height: h,
+          );
+        }
+
+        final corners = [
+          Offset(_rect.left, _rect.top),     // 0: topLeft
+          Offset(_rect.right, _rect.top),    // 1: topRight
+          Offset(_rect.left, _rect.bottom),  // 2: bottomLeft
+          Offset(_rect.right, _rect.bottom), // 3: bottomRight
+        ];
+
+        return Stack(
+          children: [
+            // 半透明背景（タップ吸収）
+            Positioned.fill(
+              child: ColoredBox(color: const Color(0x99000000)),
+            ),
+
+            // 画像本体（ドラッグで移動）
+            Positioned(
+              left: _rect.left,
+              top: _rect.top,
+              width: _rect.width,
+              height: _rect.height,
+              child: GestureDetector(
+                onPanUpdate: (d) => _move(d.delta),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFF0A84FF), width: 2),
+                  ),
+                  child: Image.memory(
+                    widget.imageBytes,
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                  ),
+                ),
+              ),
+            ),
+
+            // 四隅リサイズハンドル
+            for (int i = 0; i < 4; i++)
+              Positioned(
+                left: corners[i].dx - _handleSize / 2,
+                top: corners[i].dy - _handleSize / 2,
+                width: _handleSize,
+                height: _handleSize,
+                child: GestureDetector(
+                  onPanUpdate: (d) => _resizeCorner(i, d.delta),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF0A84FF), width: 2),
+                    ),
+                  ),
+                ),
+              ),
+
+            // 確定 / キャンセル ボタン
+            Positioned(
+              bottom: 28,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _PlacementButton(
+                    label: 'キャンセル',
+                    color: const Color(0xFF3A3A3C),
+                    onTap: widget.onCancel,
+                  ),
+                  const SizedBox(width: 16),
+                  _PlacementButton(
+                    label: '確定',
+                    color: const Color(0xFF0A84FF),
+                    onTap: () => widget.onConfirm(_rect),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PlacementButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _PlacementButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
         ),

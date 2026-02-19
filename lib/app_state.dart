@@ -111,13 +111,14 @@ class AppStateWidgetState extends State<AppStateWidget> {
   }
 
   /// 加工済み画像をアクティブレイヤーの ImageObject としてキャンバスに貼り付ける。
-  void addImageObject(Uint8List bytes) {
+  void addImageObject(Uint8List bytes, Rect bounds) {
     final obj = ImageObject(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       color: Colors.transparent,
       strokeWidth: 0,
       layerIndex: _activeLayer,
       imageBytes: bytes,
+      bounds: bounds,
     );
     setState(() {
       _history.push(_canvasState);
