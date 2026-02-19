@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:draw_your_image/draw_your_image.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +7,7 @@ import 'history/canvas_history.dart';
 import 'history/snapshot_manager.dart';
 import 'models/canvas_state.dart';
 import 'models/draw_object.dart';
+import 'models/image_object.dart';
 import 'models/snapshot.dart';
 
 /// 描画ツールの種類
@@ -107,6 +110,24 @@ class AppStateWidgetState extends State<AppStateWidget> {
     });
   }
 
+  /// 加工済み画像をアクティブレイヤーの ImageObject としてキャンバスに貼り付ける。
+  void addImageObject(Uint8List bytes, Rect bounds) {
+    final obj = ImageObject(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      color: Colors.transparent,
+      strokeWidth: 0,
+      layerIndex: _activeLayer,
+      imageBytes: bytes,
+      bounds: bounds,
+    );
+    setState(() {
+      _history.push(_canvasState);
+      _canvasState = _canvasState.copyWith(
+        objects: [..._canvasState.objects, obj],
+      );
+    });
+  }
+
   /// 新しい消しゴムストロークの開始時に呼び出す。
   /// history push フラグをリセットして、1ストローク = 1 Undo 単位とする。
   void resetEraserHistory() => _eraserHistoryPushed = false;
@@ -139,7 +160,7 @@ class AppStateWidgetState extends State<AppStateWidget> {
     });
   }
 
-  /// アクティブレイヤーの全ストロークをクリアし、Undo/Redo スタックも破棄する。
+  /// アクティブレイヤーの全ストローク・画像をクリアし、Undo/Redo スタックも破棄する。
   void clearCanvas() {
     setState(() {
       _history.clear();
@@ -147,6 +168,9 @@ class AppStateWidgetState extends State<AppStateWidget> {
       _canvasState = _canvasState.copyWith(
         strokes: _canvasState.strokes
             .where((s) => (s.data?['layer'] as int? ?? 0) != _activeLayer)
+            .toList(),
+        objects: _canvasState.objects
+            .where((o) => o.layerIndex != _activeLayer)
             .toList(),
       );
     });
