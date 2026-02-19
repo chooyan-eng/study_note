@@ -330,7 +330,7 @@ lib/
 - `pubspec.yaml` に `crop_your_image ^2.0.0` を確認・追加
 - フルスクリーンのモーダル画面として切り抜きUIを実装
   - `CropController` を生成して `Crop` ウィジェットを表示
-  - 自由比率（`aspectRatio: null`）
+  - 自由比率、`interactive: false`（細かい調整は不要）
 - 確定ボタンで `_cropController.crop()` → `onCropped` で `Uint8List` を取得
 - キャンセルで元画面に戻る
 
