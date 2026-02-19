@@ -299,13 +299,13 @@ lib/
 
 ### T13 — 画像取り込みの実装（Swift / PHPicker）
 
-**目的:** Swift の `PHPickerViewController` を使ってフォトライブラリから画像を選択する。
+**目的:** 画像を撮影、データを取得する仕組みを Swift で実装し、MethodChannel で呼び出せるようにする。
 
 **実装内容:**
 
 - `ios/Runner/PhotoPickerPlugin.swift` を新規作成
   - `MethodChannel('study_note/photo_picker')` を登録
-  - `pickPhoto` メソッドで `PHPickerViewController` を表示
+  - `pickPhoto` メソッドで撮影画面を起動（標準カメラ機能を呼び出す方法は調べてください）
   - 選択完了後に PNG データを Flutter へ返す
 - `AppDelegate.swift` にプラグインを登録
 - `image/image_importer.dart` に Flutter 側の呼び出しメソッドを実装
@@ -313,8 +313,11 @@ lib/
 **参照:** TECH_NOTES §3
 
 **完了条件:**
-- ツールバーのボタンタップでフォトライブラリが開く
+- ツールバーのボタンタップでカメラが開く
 - 選択した画像の `Uint8List` が Flutter 側で受け取れる
+
+**備考:**
+- 「カメラーロールからの選択」ではなく、「その場で撮影、取り込み」機能にします。その場でしか利用しない画像になるので、いちいちカメラロールを経由するメリットがないので。
 
 ---
 
